@@ -235,7 +235,7 @@ def calculate_score(data):
     return score, details
 
 @st.cache_data(ttl=3600)
-def build_dividend_portfolio(universe, capital, monthly_target, risk_level, version=1):
+def build_dividend_portfolio(universe, capital, monthly_target, risk_level, max_stocks=8, version=1, monthly_injection=0, reinvest_dividends=False):
     """
     Main function to build the portfolio.
     version: Cache buster
@@ -274,19 +274,38 @@ def build_dividend_portfolio(universe, capital, monthly_target, risk_level, vers
     
     df = df.sort_values(by='Score', ascending=False)
     
-    # 4. Select Top Stocks (Max 8)
-    portfolio = df.head(8).copy()
+    # 4. Select Top Stocks (Max N)
+    portfolio = df.head(max_stocks).copy()
     
     # 5. Allocate
-    # Strict 20% max allocation per stock
+    # Strict 20% max allocation per stock (unless user requests very few stocks, we might need to adjust, but let's keep it safe)
+    # Actually, if user wants 3 stocks, 20% limit means 60% invested.
+    # Let's dynamically adjust max_allocation based on num_stocks requested, but cap at 35% to ensure at least ~3 stocks
+    
+    # Safety: Ensure at least some diversification
+    # If max_stocks is small (e.g. 3), allow up to 35% per stock
+    # If max_stocks is large (e.g. 10), allow up to 20% per stock
+    
+    dynamic_ceiling = 1.0 / max(max_stocks, 1)
+    # But generally we don't want to put 100% in 1 stock.
+    # Let's set a hard cap at 35% for safety unless user insists (but here we just use logic)
+    
+    # Original logic was 20%. Let's adapt it slightly:
+    # If user asks for N stocks, we ideally want Capital/N.
+    # But we also have a "Risk Cap".
+    # Let's relax the Risk Cap if N is small.
+    
+    risk_cap = 0.20
+    if max_stocks < 5:
+        risk_cap = 0.35 # Allow more concentration if requested
+        
     num_stocks = len(portfolio)
     if num_stocks == 0: return pd.DataFrame(), pd.DataFrame(), 0.0, []
     
-    # Calculate allocation
-    max_allocation = capital * 0.20
+    max_allocation = capital * risk_cap
     ideal_allocation = capital / num_stocks
     
-    # Use the smaller of (Capital / N) or (Capital * 20%)
+    # Use the smaller of (Capital / N) or (Risk Cap)
     allocation_per_stock = min(ideal_allocation, max_allocation)
     
     portfolio['Shares'] = (allocation_per_stock / portfolio['Price']).astype(int)
@@ -320,14 +339,57 @@ def build_dividend_portfolio(universe, capital, monthly_target, risk_level, vers
         warnings.append(f"💰 มีเงินสดคงเหลือ {cash_remaining:,.2f} บาท (เนื่องจากติดเพดานลงทุน 20% ต่อตัว หรือหุ้นไม่พอ)")
 
     projection_data = []
-    current_income = portfolio['Monthly_Income_Net'].sum()
     
-    for i in range(6): # 0 to 5
-        year_income = current_income * ((1 + avg_growth) ** i)
+    # Initial State (Year 0)
+    current_annual_income = portfolio['Monthly_Income_Net'].sum() * 12 # Net Income
+    current_portfolio_value = total_investment
+    
+    # Net Yield (after 10% tax)
+    avg_yield_net = avg_yield * 0.9
+    
+    # Year 0
+    projection_data.append({
+        "Year": datetime.now().year,
+        "Monthly_Income": current_annual_income / 12,
+        "Portfolio_Value": current_portfolio_value,
+        "Yield_On_Cost": (current_annual_income / capital) # On initial capital
+    })
+    
+    running_income = current_annual_income
+    running_value = current_portfolio_value
+    
+    for i in range(1, 6): # Year 1 to 5
+        # 1. Organic Growth (DPS Growth raises the income from EXISTING shares)
+        running_income = running_income * (1 + avg_growth)
+        
+        # 2. Capital Injection
+        annual_injection = monthly_injection * 12
+        
+        # 3. Dividend Reinvestment
+        reinvest_amount = 0
+        if reinvest_dividends:
+            # Reinvest the Net Income from previous year
+            reinvest_amount = running_income
+            
+        # Total New Capital
+        new_capital = annual_injection + reinvest_amount
+        
+        # Income from New Capital (Assume buying at current yield)
+        income_from_new_capital = new_capital * avg_yield_net
+        
+        # Update State
+        running_income += income_from_new_capital
+        running_value += new_capital # Add cash injected
+        
+        # Value Growth (Price appreciation)
+        # Assume Price grows at same rate as Dividend (avg_growth) to maintain constant yield
+        running_value = running_value * (1 + avg_growth)
+        
         projection_data.append({
             "Year": datetime.now().year + i,
-            "Monthly_Income": year_income,
-            "Yield_On_Cost": (year_income * 12) / (capital * 0.9) # Yield on invested capital (approx)
+            "Monthly_Income": running_income / 12,
+            "Portfolio_Value": running_value,
+            "Yield_On_Cost": (running_income / capital) # On INITIAL capital
         })
         
     return portfolio, pd.DataFrame(projection_data), avg_yield, warnings

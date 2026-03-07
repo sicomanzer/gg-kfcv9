@@ -197,15 +197,15 @@ if not df.empty:
 # --- SIDEBAR NAVIGATION ---
 st.sidebar.title("เมนูหลัก")
 page = st.sidebar.radio("ไปยังหน้า", [
-    "แดชบอร์ดภาพรวม", 
-    "วิเคราะห์หุ้นรายตัว", 
+    "📊 แดชบอร์ดภาพรวม", 
+    "🔍 วิเคราะห์หุ้นรายตัว", 
     "📊 เจาะลึกกำไร 5 ปี (EPS Trends)",
-    "เปรียบเทียบคู่แข่ง", 
-    "แนะนำพอร์ตการลงทุน", 
+    "⚖️ เปรียบเทียบคู่แข่ง", 
+    "💡 แนะนำพอร์ตการลงทุน", 
     "💰 พอร์ตปันผล Value Growth",
-    "พอร์ตของฉัน (My Portfolio)", 
-    "จำลองการออมหุ้น (DCA Backtester)",
-    "ตั้งค่า"
+    "🎒 พอร์ตของฉัน (My Portfolio)", 
+    "⏳ จำลองการออมหุ้น (DCA Backtester)",
+    "⚙️ ตั้งค่า"
 ])
 
 # --- EPS TRENDS PAGE ---
@@ -336,7 +336,7 @@ if page == "📊 เจาะลึกกำไร 5 ปี (EPS Trends)":
         
         st.dataframe(df_show, column_order=valid_cols, column_config=cfg, hide_index=True, height=600, use_container_width=True)
 
-if page == "แดชบอร์ดภาพรวม":
+if page == "📊 แดชบอร์ดภาพรวม":
     st.title("📊 โปรแกรมคัดกรองหุ้นคุณค่า (VI)")
     st.markdown("พัฒนาตามหลักการลงทุนของ คุณกวี ชูกิจเกษม")
 
@@ -1426,7 +1426,7 @@ if page == "แดชบอร์ดภาพรวม":
         fig_treemap.update_layout(height=600)
         st.plotly_chart(fig_treemap, use_container_width=True)
 
-elif page == "วิเคราะห์หุ้นรายตัว":
+elif page == "🔍 วิเคราะห์หุ้นรายตัว":
     st.title("🔎 วิเคราะห์หุ้นเจาะลึก (Pro Stock Analysis)")
     
     # Select Stock
@@ -1720,7 +1720,7 @@ elif page == "วิเคราะห์หุ้นรายตัว":
                 st.error("ไม่สามารถดึงข้อมูลหุ้นตัวนี้ได้")
 
 
-elif page == "เปรียบเทียบคู่แข่ง":
+elif page == "⚖️ เปรียบเทียบคู่แข่ง":
     st.title("⚔️ เปรียบเทียบคู่แข่ง (Competitor Analysis)")
     st.markdown("เปรียบเทียบตัวเลขทางการเงินของหุ้นหลายตัวแบบตัวต่อตัว")
     
@@ -1782,7 +1782,7 @@ elif page == "เปรียบเทียบคู่แข่ง":
                     st.error("ไม่สามารถดึงข้อมูลย้อนหลังได้")
 
 
-elif page == "แนะนำพอร์ตการลงทุน":
+elif page == "💡 แนะนำพอร์ตการลงทุน":
     st.title("🍰 แนะนำพอร์ตการลงทุน (Asset Allocation)")
     
     st.markdown("สร้างพอร์ตการลงทุนที่สมดุล ตามหลักการกระจายความเสี่ยง")
@@ -2090,7 +2090,7 @@ elif page == "แนะนำพอร์ตการลงทุน":
         
         st.caption("*หมายเหตุ: ข้อมูลหุ้นไทยอ้างอิงราคาล่าสุด | กองทุนและตราสารหนี้ใช้ราคาและผลตอบแทนสมมติเพื่อการคำนวณเท่านั้น")
 
-elif page == "พอร์ตของฉัน (My Portfolio)":
+elif page == "🎒 พอร์ตของฉัน (My Portfolio)":
     st.title("🎒 พอร์ตของฉัน (My Portfolio)")
     st.markdown("บันทึกการซื้อขายและติดตามผลกำไรขาดทุนของพอร์ตโฟลิโอ")
     
@@ -2151,7 +2151,7 @@ elif page == "พอร์ตของฉัน (My Portfolio)":
     else:
         st.info("ยังไม่มีข้อมูลในพอร์ต กรุณาเพิ่มรายการซื้อขาย")
 
-elif page == "จำลองการออมหุ้น (DCA Backtester)":
+elif page == "⏳ จำลองการออมหุ้น (DCA Backtester)":
     st.title("⏳ จำลองการออมหุ้น (DCA Backtester)")
     st.markdown("ทดสอบผลตอบแทนย้อนหลัง หากเราลงทุนแบบ Dollar Cost Average (DCA) อย่างมีวินัย")
     
@@ -2192,7 +2192,7 @@ elif page == "จำลองการออมหุ้น (DCA Backtester)":
             else:
                 st.error("ไม่สามารถดึงข้อมูลย้อนหลังได้ หรือข้อมูลไม่เพียงพอ")
             
-elif page == "ตั้งค่า":
+elif page == "⚙️ ตั้งค่า":
     st.title("⚙️ ตั้งค่า (Settings)")
     
     st.subheader("จัดการรายชื่อหุ้น (SET100)")
@@ -2221,7 +2221,13 @@ elif page == "💰 พอร์ตปันผล Value Growth":
         st.caption(f"💰 {capital:,.0f} บาท")
         monthly_target = st.number_input("เป้าหมายปันผล (บาท/เดือน)", value=50000, step=5000, format="%d")
         st.caption(f"💰 {monthly_target:,.0f} บาท/เดือน")
+        num_stocks = st.number_input("จำนวนหุ้นในพอร์ต (ตัว)", value=8, min_value=1, max_value=20, step=1)
         risk_level = st.select_slider("ระดับความเสี่ยง (Risk Level)", options=["Conservative", "Balanced", "Aggressive"], value="Balanced")
+        
+        st.markdown("---")
+        st.markdown("**🚀 เร่งการเติบโต (Growth Booster)**")
+        monthly_injection = st.number_input("เติมเงินลงทุนต่อเดือน (บาท)", value=0, step=1000, format="%d", help="จำนวนเงินที่ออมเพิ่มเพื่อซื้อหุ้นทุกเดือน")
+        reinvest_dividends = st.checkbox("ทบต้นดอกเบี้ย (Reinvest Dividends)", value=False, help="นำเงินปันผลที่ได้กลับมาซื้อหุ้นเพิ่มอัตโนมัติ (Compound Interest)")
         
         st.info(f"""
         **เป้าหมาย:**
@@ -2230,7 +2236,7 @@ elif page == "💰 พอร์ตปันผล Value Growth":
         - สุทธิ: {monthly_target:,.0f} บาท/เดือน
         """)
 
-    st.title(f"💰 สร้างพอร์ตปันผล Value Growth ({monthly_target:,.0f} บาท/เดือน)")
+    st.title("💰 สร้างพอร์ตปันผล Value Growth")
     st.markdown("---")
 
     st.markdown(f"""
@@ -2246,8 +2252,8 @@ elif page == "💰 พอร์ตปันผล Value Growth":
         with st.spinner("กำลังสแกนหาหุ้นปันผลที่ดีที่สุดจากตลาด (SET)... อาจใช้เวลา 1-2 นาที"):
             # Use SET100 + High Priority
             universe = SET100_TICKERS
-            # Pass version=3 to force cache invalidation and use new logic
-            portfolio, projection, avg_yield, warnings = portfolio_builder.build_dividend_portfolio(universe, capital, monthly_target, risk_level, version=3)
+            # Pass version=5 to force cache invalidation and use new logic
+            portfolio, projection, avg_yield, warnings = portfolio_builder.build_dividend_portfolio(universe, capital, monthly_target, risk_level, max_stocks=num_stocks, version=5, monthly_injection=monthly_injection, reinvest_dividends=reinvest_dividends)
             
             # Save to session state
             st.session_state.portfolio_data = {
@@ -2286,16 +2292,29 @@ elif page == "💰 พอร์ตปันผล Value Growth":
             chart_c1, chart_c2 = st.columns(2)
             
             with chart_c1:
-                st.subheader("📈 แนวโน้มเงินปันผล 5 ปีข้างหน้า (Dividend Projection)")
+                st.subheader("📈 แนวโน้มการเติบโต (Growth Projection)")
                 
-                # Line Chart
+                tab_inc, tab_val = st.tabs(["💰 เงินปันผล (Income)", "💎 มูลค่าพอร์ต (Portfolio Value)"])
+                
                 if not projection.empty:
-                    fig_proj = px.line(projection, x='Year', y='Monthly_Income', markers=True, 
-                                       title="คาดการณ์เงินปันผลสุทธิต่อเดือน (Projected Monthly Net Income)",
-                                       labels={'Monthly_Income': 'บาท/เดือน', 'Year': 'ปี'})
-                    # Add target line
-                    fig_proj.add_hline(y=target_used, line_dash="dash", line_color="green", annotation_text="Target")
-                    st.plotly_chart(fig_proj, use_container_width=True)
+                    with tab_inc:
+                        # Line Chart - Income
+                        fig_proj = px.line(projection, x='Year', y='Monthly_Income', markers=True, 
+                                           title="คาดการณ์เงินปันผลสุทธิต่อเดือน (Projected Monthly Net Income)",
+                                           labels={'Monthly_Income': 'บาท/เดือน', 'Year': 'ปี'})
+                        # Add target line
+                        fig_proj.add_hline(y=target_used, line_dash="dash", line_color="green", annotation_text="Target")
+                        fig_proj.update_layout(yaxis_tickformat=",.0f")
+                        st.plotly_chart(fig_proj, use_container_width=True)
+                        
+                    with tab_val:
+                        # Line Chart - Value
+                        fig_val = px.line(projection, x='Year', y='Portfolio_Value', markers=True,
+                                          title="คาดการณ์มูลค่าพอร์ต (Projected Portfolio Value)",
+                                          labels={'Portfolio_Value': 'มูลค่าพอร์ต (บาท)', 'Year': 'ปี'})
+                        fig_val.update_traces(line_color='#8b5cf6') # Purple
+                        fig_val.update_layout(yaxis_tickformat=",.0f")
+                        st.plotly_chart(fig_val, use_container_width=True)
             
             with chart_c2:
                 # Pie Chart Allocation
@@ -2358,12 +2377,25 @@ elif page == "💰 พอร์ตปันผล Value Growth":
 
             # 4. Actions
             csv = portfolio.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Export Portfolio to Excel/CSV",
-                data=csv,
-                file_name='gg_dividend_portfolio.csv',
-                mime='text/csv',
-            )
+            
+            c_action1, c_action2 = st.columns([1, 2])
+            with c_action1:
+                st.download_button(
+                    label="📥 Export Portfolio to Excel/CSV",
+                    data=csv,
+                    file_name='gg_dividend_portfolio.csv',
+                    mime='text/csv',
+                    use_container_width=True
+                )
+            
+            st.markdown("---")
+            st.caption("""
+            **⚠️ หมายเหตุและข้อควรระวัง (Disclaimer):**
+            1. **แหล่งข้อมูล:** ข้อมูลทั้งหมดดึงมาจาก **Yahoo Finance** แบบเรียลไทม์ (อาจมีความล่าช้า 15-20 นาที) และงบการเงินย้อนหลัง
+            2. **ความถูกต้อง:** โปรแกรมใช้อัลกอริทึมในการคำนวณและคัดกรองเบื้องต้น ข้อมูลอาจมีความคลาดเคลื่อนจากแหล่งข้อมูลต้นทาง
+            3. **ไม่ใช่คำแนะนำการลงทุน:** ผลลัพธ์นี้เป็นเพียงแนวทาง (Guide) สำหรับการศึกษาและวิเคราะห์เบื้องต้นเท่านั้น ผู้ใช้งานควรตรวจสอบข้อมูลจาก **SET.or.th** หรือหนังสือชี้ชวนก่อนตัดสินใจลงทุนจริง
+            4. **การคำนวณ:** การคาดการณ์ปันผลในอนาคต (Projection) ใช้สมมติฐานการเติบโตในอดีต ซึ่งอาจไม่สะท้อนอนาคตที่แท้จริง
+            """)
         
         else:
             st.error("ไม่พบหุ้นที่ผ่านเกณฑ์ หรือข้อมูลไม่เพียงพอ กรุณาลองใหม่อีกครั้ง")
