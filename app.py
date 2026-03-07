@@ -531,6 +531,72 @@ if page == "📊 แดชบอร์ดภาพรวม":
                 ))
                 fig_fng.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20))
                 st.plotly_chart(fig_fng, use_container_width=True)
+
+    # --- MARKET SENTIMENT ANALYSIS (Combined VIX + F&G) ---
+    if vix_data and fng_data:
+        st.markdown("---")
+        st.subheader("💡 วิเคราะห์จุดซื้อขายจากอารมณ์ตลาด (Market Timing)")
+        
+        # Logic Variables
+        # Check if variables exist in scope, otherwise re-extract
+        v_price = vix_data['current']
+        f_score = fng_data['score']
+        
+        sentiment_status = "Neutral (ปกติ)"
+        sentiment_color = "#6b7280" # Gray
+        sentiment_action = "Wait & See (รอดูสถานการณ์ / ลงทุนตามแผนปกติ)"
+        sentiment_desc = "ตลาดอยู่ในภาวะปกติ ไม่มีความกลัวหรือความโลภที่รุนแรงมากนัก เน้นคัดเลือกหุ้นรายตัว (Stock Selection)"
+        
+        # 1. Super Buy (Panic + Extreme Fear) -> Buy when others are fearful
+        if v_price >= 30 and f_score <= 25:
+            sentiment_status = "🔥 โอกาสทอง (Super Buy Opportunity)"
+            sentiment_color = "#047857" # Dark Green
+            sentiment_action = "Aggressive Buy (กล้าซื้อสวนตลาด)"
+            sentiment_desc = "ทุกคนกลัวสุดขีด (Extreme Fear) + ตลาดเทขายรุนแรง (High VIX) = **เวลาที่ดีที่สุดในการซื้อหุ้นดีราคาถูก** (Warren Buffett: 'Be greedy when others are fearful')"
+            
+        # 2. Buy/Accumulate (Moderate Fear)
+        elif (v_price >= 20) and (f_score < 45):
+            sentiment_status = "✅ น่าสะสม (Accumulate)"
+            sentiment_color = "#10b981" # Green
+            sentiment_action = "Buy on Dip (ซื้อเมื่อย่อตัว)"
+            sentiment_desc = "ตลาดมีความกังวล ราคาหุ้นเริ่มถูกลง เป็นจังหวะดีในการทยอยสะสมหุ้นพื้นฐานดี"
+            
+        # 3. Warning/Sell (Complacency + Extreme Greed) -> Sell when others are greedy
+        elif v_price < 20 and f_score >= 75:
+            sentiment_status = "⚠️ ระวังแรงขาย (Overbought/Caution)"
+            sentiment_color = "#ef4444" # Red
+            sentiment_action = "Take Profit / Wait (ขายทำกำไร / ชะลอการซื้อ)"
+            sentiment_desc = "ตลาดนิ่งนอนใจ (Low VIX) + มีความโลภสูง (Extreme Greed) = **ความเสี่ยงในการปรับฐานสูง** (Warren Buffett: 'Be fearful when others are greedy')"
+            
+        # 4. Danger Zone (Extreme Complacency / Bubble)
+        elif v_price < 15 and f_score >= 85:
+             sentiment_status = "⛔ ฟองสบู่/ความเสี่ยงสูง (Bubble Risk)"
+             sentiment_color = "#b91c1c" # Dark Red
+             sentiment_action = "Defensive / Hold Cash (ถือเงินสด / ระวังดอย)"
+             sentiment_desc = "ตลาดมั่นใจเกินเหตุ (Very Low VIX) + โลภสุดขีด = **ระวังการปรับฐานรุนแรง**"
+
+        # 5. Mixed Signals (High Volatility but High Greed? Rare)
+        elif v_price > 30 and f_score > 60:
+            sentiment_status = "😵 ตลาดสับสน/ผันผวน (Mixed Signals)"
+            sentiment_color = "#f59e0b" # Orange
+            sentiment_action = "Wait & Watch (จับตาดูใกล้ชิด)"
+            sentiment_desc = "ความผันผวนสูงแต่ตลาดยังโลภ อาจเกิดจากข่าวดี/ร้ายที่รุนแรงเฉพาะกลุ่ม"
+
+        # Display Logic
+        with st.container():
+            st.markdown(f"""
+            <div style="padding: 20px; border-radius: 10px; border: 2px solid {sentiment_color}; background-color: rgba(255,255,255,0.05);">
+                <h3 style="margin-top: 0; color: {sentiment_color};">สรุปคำแนะนำ: {sentiment_status}</h3>
+                <p style="font-size: 18px; font-weight: bold;">🎯 กลยุทธ์: {sentiment_action}</p>
+                <p style="font-style: italic;">"{sentiment_desc}"</p>
+                <hr style="margin: 10px 0; border-top: 1px dashed #ccc;">
+                <small style="color: gray;">
+                    <b>เกณฑ์การวิเคราะห์:</b><br>
+                    • <b>Buy:</b> VIX สูง (กลัว) + F&G ต่ำ (กลัวสุดขีด)<br>
+                    • <b>Sell:</b> VIX ต่ำ (นิ่งนอนใจ) + F&G สูง (โลภสุดขีด)
+                </small>
+            </div>
+            """, unsafe_allow_html=True)
     
     # Dashboard uses 'df' loaded globally
     
