@@ -440,6 +440,97 @@ if page == "📊 แดชบอร์ดภาพรวม":
     else:
         st.warning("⚠️ ไม่สามารถดึงข้อมูล VIX Index ได้ในขณะนี้ (ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต)")
 
+    # --- FEAR & GREED INDEX DISPLAY (New Feature) ---
+    fng_data = utils.get_fear_and_greed_index()
+    
+    if fng_data:
+        fng_score = fng_data['score']
+        fng_rating = fng_data['rating'] # e.g., "fear", "extreme greed"
+        fng_timestamp = fng_data['timestamp']
+        
+        # Normalize rating string
+        rating_lower = fng_rating.lower()
+        
+        # Determine Color & Icon
+        if "extreme fear" in rating_lower:
+            fng_color = "#b91c1c" # Dark Red
+            fng_bg = "rgba(185, 28, 28, 0.1)"
+            fng_icon = "😱"
+            fng_th_rating = "กลัวสุดขีด (Extreme Fear)"
+        elif "fear" in rating_lower and "extreme" not in rating_lower:
+            fng_color = "#ef4444" # Red
+            fng_bg = "rgba(239, 68, 68, 0.1)"
+            fng_icon = "😨"
+            fng_th_rating = "กลัว (Fear)"
+        elif "neutral" in rating_lower:
+            fng_color = "#6b7280" # Gray
+            fng_bg = "rgba(107, 114, 128, 0.1)"
+            fng_icon = "😐"
+            fng_th_rating = "เป็นกลาง (Neutral)"
+        elif "extreme greed" in rating_lower:
+            fng_color = "#047857" # Dark Green
+            fng_bg = "rgba(4, 120, 87, 0.1)"
+            fng_icon = "🤑"
+            fng_th_rating = "โลภสุดขีด (Extreme Greed)"
+        else: # greed
+            fng_color = "#10b981" # Green
+            fng_bg = "rgba(16, 185, 129, 0.1)"
+            fng_icon = "🙂"
+            fng_th_rating = "โลภ (Greed)"
+            
+        with st.container():
+            st.markdown(f"""
+            <div style="background-color: {fng_bg}; padding: 15px; border-radius: 10px; border: 1px solid {fng_color}; margin-bottom: 20px;">
+                <h3 style="margin: 0; color: {fng_color};">🌡️ ดัชนีความกลัวและความโลภ (Fear & Greed Index)</h3>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            c_fng1, c_fng2 = st.columns([1, 2.5])
+            
+            with c_fng1:
+                st.markdown(f"""
+                <div style="text-align: center; padding: 10px;">
+                    <div style="font-size: 50px; font-weight: bold; color: {fng_color}; line-height: 1;">
+                        {fng_score:.0f}
+                    </div>
+                    <div style="font-size: 20px; font-weight: bold; color: {fng_color}; margin-top: 5px;">
+                        {fng_icon} {fng_th_rating}
+                    </div>
+                    <div style="font-size: 14px; color: gray; margin-top: 5px;">
+                        Last Updated: {fng_timestamp[:10]}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+            with c_fng2:
+                # Gauge Chart
+                fig_fng = go.Figure(go.Indicator(
+                    mode = "gauge+number",
+                    value = fng_score,
+                    domain = {'x': [0, 1], 'y': [0, 1]},
+                    title = {'text': "Market Sentiment (0-100)"},
+                    gauge = {
+                        'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
+                        'bar': {'color': fng_color},
+                        'bgcolor': "white",
+                        'borderwidth': 2,
+                        'bordercolor': "gray",
+                        'steps': [
+                            {'range': [0, 25], 'color': '#fee2e2'}, # Light Red
+                            {'range': [25, 45], 'color': '#ffedd5'}, # Light Orange
+                            {'range': [45, 55], 'color': '#f3f4f6'}, # Light Gray
+                            {'range': [55, 75], 'color': '#dcfce7'}, # Light Green
+                            {'range': [75, 100], 'color': '#d1fae5'} # Light Emerald
+                        ],
+                        'threshold': {
+                            'line': {'color': "black", 'width': 4},
+                            'thickness': 0.75,
+                            'value': fng_score
+                        }
+                    }
+                ))
+                fig_fng.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20))
+                st.plotly_chart(fig_fng, use_container_width=True)
     
     # Dashboard uses 'df' loaded globally
     

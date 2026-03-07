@@ -58,6 +58,49 @@ def get_vix_data():
         print(f"Error fetching VIX: {e}")
         return None
 
+def get_fear_and_greed_index():
+    """
+    Fetches the CNN Fear and Greed Index.
+    Returns: {
+        'score': float,
+        'rating': str,
+        'timestamp': str,
+        'previous_close': float,
+        'previous_1_week': float,
+        'previous_1_month': float,
+        'previous_1_year': float
+    }
+    """
+    try:
+        url = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+            "Referer": "https://www.cnn.com/",
+            "Origin": "https://www.cnn.com"
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()
+        
+        data = response.json()
+        fng = data.get('fear_and_greed', {})
+        
+        if not fng:
+            return None
+            
+        return {
+            'score': fng.get('score'),
+            'rating': fng.get('rating'),
+            'timestamp': fng.get('timestamp'),
+            'previous_close': fng.get('previous_close'),
+            'previous_1_week': fng.get('previous_1_week'),
+            'previous_1_month': fng.get('previous_1_month'),
+            'previous_1_year': fng.get('previous_1_year')
+        }
+    except Exception as e:
+        print(f"Error fetching Fear and Greed Index: {e}")
+        return None
+
 def get_set_index_data():
     """
     Fetches the SET Index (^SET.BK) data.
