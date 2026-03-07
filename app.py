@@ -2286,11 +2286,15 @@ elif page == "💰 พอร์ตปันผล Value Growth":
                 portfolio['ROE'] = portfolio['Details'].apply(lambda x: x.get('ROE', 0))
                 portfolio['D/E'] = portfolio['Details'].apply(lambda x: x.get('DE_Ratio', 0))
                 portfolio['Annual_Income_Net'] = portfolio['Monthly_Income_Net'] * 12
+                
+                # Calculate Investment Weight
+                total_inv = portfolio['Investment'].sum()
+                portfolio['Weight'] = portfolio['Investment'] / total_inv if total_inv > 0 else 0
 
-                display_df = portfolio[['Ticker', 'Price', 'Score', 'Yield', 'DPS_Growth', 'Payout', 'ROE', 'D/E', 'Shares', 'Investment', 'Monthly_Income_Net', 'Annual_Income_Net']].copy()
+                display_df = portfolio[['Ticker', 'Price', 'Score', 'Weight', 'Yield', 'DPS_Growth', 'Payout', 'ROE', 'D/E', 'Shares', 'Investment', 'Monthly_Income_Net', 'Annual_Income_Net']].copy()
                 
                 # Format Percentage
-                for col in ['Yield', 'DPS_Growth', 'Payout', 'ROE']:
+                for col in ['Yield', 'DPS_Growth', 'Payout', 'ROE', 'Weight']:
                     display_df[col] = display_df[col].map(lambda x: f"{x:.2%}" if pd.notnull(x) else "-")
                 
                 # Format Numbers
@@ -2306,6 +2310,7 @@ elif page == "💰 พอร์ตปันผล Value Growth":
                     'Ticker': 'ชื่อหุ้น',
                     'Price': 'ราคา',
                     'Score': 'คะแนน',
+                    'Weight': 'สัดส่วน (%)',
                     'Yield': 'ปันผล (%)',
                     'DPS_Growth': 'Growth (%)',
                     'Payout': 'Payout',
