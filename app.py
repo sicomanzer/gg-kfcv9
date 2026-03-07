@@ -342,195 +342,197 @@ if page == "📊 แดชบอร์ดภาพรวม":
 
     st.markdown("---")
     
-    # --- VIX INDEX DISPLAY (New Feature) ---
+    # --- MARKET OVERVIEW (VIX & FEAR/GREED) ---
     vix_data = utils.get_vix_data()
-    
-    if vix_data:
-        vix_price = vix_data['current']
-        vix_change = vix_data['change']
-        vix_pct = vix_data['pct_change']
-        vix_hist = vix_data['history']
-        
-        # Determine Status & Color
-        if vix_price < 20:
-            vix_status = "ตลาดค่อนข้างนิ่ง (Calm)"
-            vix_color = "#10b981" # Green
-            vix_bg = "rgba(16, 185, 129, 0.1)"
-            vix_icon = "😊"
-            vix_desc = "VIX ต่ำกว่า 20: ความผันผวนต่ำ นักลงทุนคลายความกังวล"
-        elif 20 <= vix_price < 30:
-            vix_status = "เริ่มผันผวน (Caution)"
-            vix_color = "#f59e0b" # Orange
-            vix_bg = "rgba(245, 158, 11, 0.1)"
-            vix_icon = "⚠️"
-            vix_desc = "VIX 20-30: ตลาดเริ่มมีความเสี่ยงและความผันผวนเพิ่มขึ้น"
-        elif 30 <= vix_price <= 40:
-            vix_status = "ตลาดเริ่มกลัว (Fear)"
-            vix_color = "#ef4444" # Red
-            vix_bg = "rgba(239, 68, 68, 0.1)"
-            vix_icon = "😨"
-            vix_desc = "VIX สูงกว่า 30: ความกลัวปกคลุมตลาด มีโอกาส panic sell"
-        else: # > 40
-            vix_status = "Panic! (วิกฤต)"
-            vix_color = "#b91c1c" # Dark Red
-            vix_bg = "rgba(185, 28, 28, 0.1)"
-            vix_icon = "🔥"
-            vix_desc = "VIX สูงกว่า 40: ตลาดแตกตื่นรุนแรง (Panic Mode)"
-
-        # Layout: Current Value (Left) + Chart (Right)
-        with st.container():
-            st.markdown(f"""
-            <div style="background-color: {vix_bg}; padding: 15px; border-radius: 10px; border: 1px solid {vix_color}; margin-bottom: 20px;">
-                <h3 style="margin: 0; color: {vix_color};">⚡ ดัชนีความกลัว (VIX Index)</h3>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            c_vix1, c_vix2 = st.columns([1, 2.5])
-            
-            with c_vix1:
-                st.markdown(f"""
-                <div style="text-align: center; padding: 10px;">
-                    <div style="font-size: 50px; font-weight: bold; color: {vix_color}; line-height: 1;">
-                        {vix_price:.2f}
-                    </div>
-                    <div style="font-size: 20px; font-weight: bold; color: {vix_color}; margin-top: 5px;">
-                        {vix_icon} {vix_status}
-                    </div>
-                    <div style="font-size: 16px; color: {'green' if vix_change < 0 else 'red'}; margin-top: 5px;">
-                        {vix_change:+.2f} ({vix_pct:+.2f}%)
-                    </div>
-                    <div style="margin-top: 15px; font-size: 14px; background-color: white; padding: 8px; border-radius: 5px; border: 1px dashed #ccc;">
-                        <b>💡 คำแนะนำ:</b><br>{vix_desc}<br>
-                        <span style="font-size: 12px; color: gray;">ค่าเฉลี่ยระยะยาว ≈ 19-21</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-            with c_vix2:
-                # Plotly Chart
-                fig_vix = go.Figure()
-                
-                # Main Line
-                fig_vix.add_trace(go.Scatter(
-                    x=vix_hist.index, 
-                    y=vix_hist['Close'],
-                    mode='lines',
-                    name='VIX',
-                    line=dict(color=vix_color, width=2)
-                ))
-                
-                # Threshold Lines layout
-                fig_vix.update_layout(
-                    title=dict(text="ความเคลื่อนไหว VIX ในรอบ 5 ปี", font=dict(size=16)),
-                    height=250,
-                    margin=dict(l=20, r=20, t=40, b=20),
-                    showlegend=False,
-                    xaxis=dict(showgrid=False),
-                    yaxis=dict(showgrid=True, gridcolor='#eee'),
-                    shapes=[
-                        # Line at 20
-                        dict(type="line", xref="paper", x0=0, x1=1, yref="y", y0=20, y1=20, line=dict(color="green", width=1, dash="dash"), layer="below"),
-                        # Line at 30
-                        dict(type="line", xref="paper", x0=0, x1=1, yref="y", y0=30, y1=30, line=dict(color="red", width=1, dash="dash"), layer="below"),
-                    ]
-                )
-                
-                # Add Annotation for current value if needed, but handled by chart text
-                st.plotly_chart(fig_vix, use_container_width=True)
-    else:
-        st.warning("⚠️ ไม่สามารถดึงข้อมูล VIX Index ได้ในขณะนี้ (ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต)")
-
-    # --- FEAR & GREED INDEX DISPLAY (New Feature) ---
     fng_data = utils.get_fear_and_greed_index()
     
-    if fng_data:
-        fng_score = fng_data['score']
-        fng_rating = fng_data['rating'] # e.g., "fear", "extreme greed"
-        fng_timestamp = fng_data['timestamp']
-        
-        # Normalize rating string
-        rating_lower = fng_rating.lower()
-        
-        # Determine Color & Icon
-        if "extreme fear" in rating_lower:
-            fng_color = "#b91c1c" # Dark Red
-            fng_bg = "rgba(185, 28, 28, 0.1)"
-            fng_icon = "😱"
-            fng_th_rating = "กลัวสุดขีด (Extreme Fear)"
-        elif "fear" in rating_lower and "extreme" not in rating_lower:
-            fng_color = "#ef4444" # Red
-            fng_bg = "rgba(239, 68, 68, 0.1)"
-            fng_icon = "😨"
-            fng_th_rating = "กลัว (Fear)"
-        elif "neutral" in rating_lower:
-            fng_color = "#6b7280" # Gray
-            fng_bg = "rgba(107, 114, 128, 0.1)"
-            fng_icon = "😐"
-            fng_th_rating = "เป็นกลาง (Neutral)"
-        elif "extreme greed" in rating_lower:
-            fng_color = "#047857" # Dark Green
-            fng_bg = "rgba(4, 120, 87, 0.1)"
-            fng_icon = "🤑"
-            fng_th_rating = "โลภสุดขีด (Extreme Greed)"
-        else: # greed
-            fng_color = "#10b981" # Green
-            fng_bg = "rgba(16, 185, 129, 0.1)"
-            fng_icon = "🙂"
-            fng_th_rating = "โลภ (Greed)"
+    c_market_1, c_market_2 = st.columns(2)
+    
+    with c_market_1:
+        # --- VIX INDEX DISPLAY ---
+        if vix_data:
+            vix_price = vix_data['current']
+            vix_change = vix_data['change']
+            vix_pct = vix_data['pct_change']
+            vix_hist = vix_data['history']
             
-        with st.container():
-            st.markdown(f"""
-            <div style="background-color: {fng_bg}; padding: 15px; border-radius: 10px; border: 1px solid {fng_color}; margin-bottom: 20px;">
-                <h3 style="margin: 0; color: {fng_color};">🌡️ ดัชนีความกลัวและความโลภ (Fear & Greed Index)</h3>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            c_fng1, c_fng2 = st.columns([1, 2.5])
-            
-            with c_fng1:
+            # Determine Status & Color
+            if vix_price < 20:
+                vix_status = "ตลาดค่อนข้างนิ่ง (Calm)"
+                vix_color = "#10b981" # Green
+                vix_bg = "rgba(16, 185, 129, 0.1)"
+                vix_icon = "😊"
+                vix_desc = "VIX ต่ำกว่า 20: ความผันผวนต่ำ นักลงทุนคลายความกังวล"
+            elif 20 <= vix_price < 30:
+                vix_status = "เริ่มผันผวน (Caution)"
+                vix_color = "#f59e0b" # Orange
+                vix_bg = "rgba(245, 158, 11, 0.1)"
+                vix_icon = "⚠️"
+                vix_desc = "VIX 20-30: ตลาดเริ่มมีความเสี่ยงและความผันผวนเพิ่มขึ้น"
+            elif 30 <= vix_price <= 40:
+                vix_status = "ตลาดเริ่มกลัว (Fear)"
+                vix_color = "#ef4444" # Red
+                vix_bg = "rgba(239, 68, 68, 0.1)"
+                vix_icon = "😨"
+                vix_desc = "VIX สูงกว่า 30: ความกลัวปกคลุมตลาด มีโอกาส panic sell"
+            else: # > 40
+                vix_status = "Panic! (วิกฤต)"
+                vix_color = "#b91c1c" # Dark Red
+                vix_bg = "rgba(185, 28, 28, 0.1)"
+                vix_icon = "🔥"
+                vix_desc = "VIX สูงกว่า 40: ตลาดแตกตื่นรุนแรง (Panic Mode)"
+    
+            # Layout: Current Value (Left) + Chart (Right)
+            with st.container():
                 st.markdown(f"""
-                <div style="text-align: center; padding: 10px;">
-                    <div style="font-size: 50px; font-weight: bold; color: {fng_color}; line-height: 1;">
-                        {fng_score:.0f}
-                    </div>
-                    <div style="font-size: 20px; font-weight: bold; color: {fng_color}; margin-top: 5px;">
-                        {fng_icon} {fng_th_rating}
-                    </div>
-                    <div style="font-size: 14px; color: gray; margin-top: 5px;">
-                        Last Updated: {fng_timestamp[:10]}
-                    </div>
+                <div style="background-color: {vix_bg}; padding: 15px; border-radius: 10px; border: 1px solid {vix_color}; margin-bottom: 20px;">
+                    <h3 style="margin: 0; color: {vix_color};">⚡ ดัชนีความกลัว (VIX Index)</h3>
                 </div>
                 """, unsafe_allow_html=True)
                 
-            with c_fng2:
-                # Gauge Chart
-                fig_fng = go.Figure(go.Indicator(
-                    mode = "gauge+number",
-                    value = fng_score,
-                    domain = {'x': [0, 1], 'y': [0, 1]},
-                    title = {'text': "Market Sentiment (0-100)"},
-                    gauge = {
-                        'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
-                        'bar': {'color': fng_color},
-                        'bgcolor': "white",
-                        'borderwidth': 2,
-                        'bordercolor': "gray",
-                        'steps': [
-                            {'range': [0, 25], 'color': '#fee2e2'}, # Light Red
-                            {'range': [25, 45], 'color': '#ffedd5'}, # Light Orange
-                            {'range': [45, 55], 'color': '#f3f4f6'}, # Light Gray
-                            {'range': [55, 75], 'color': '#dcfce7'}, # Light Green
-                            {'range': [75, 100], 'color': '#d1fae5'} # Light Emerald
-                        ],
-                        'threshold': {
-                            'line': {'color': "black", 'width': 4},
-                            'thickness': 0.75,
-                            'value': fng_score
+                c_vix1, c_vix2 = st.columns([1, 1.5]) # Adjusted ratio for smaller column
+                
+                with c_vix1:
+                    st.markdown(f"""
+                    <div style="text-align: center; padding: 5px;">
+                        <div style="font-size: 40px; font-weight: bold; color: {vix_color}; line-height: 1;">
+                            {vix_price:.2f}
+                        </div>
+                        <div style="font-size: 16px; font-weight: bold; color: {vix_color}; margin-top: 5px;">
+                            {vix_icon} {vix_status}
+                        </div>
+                        <div style="font-size: 14px; color: {'green' if vix_change < 0 else 'red'}; margin-top: 5px;">
+                            {vix_change:+.2f} ({vix_pct:+.2f}%)
+                        </div>
+                        <div style="margin-top: 10px; font-size: 12px; background-color: rgba(255,255,255,0.1); padding: 5px; border-radius: 5px; border: 1px dashed {vix_color};">
+                            {vix_desc}<br>
+                            <span style="font-size: 10px; color: gray;">Avg ≈ 19-21</span>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                with c_vix2:
+                    # Plotly Chart
+                    fig_vix = go.Figure()
+                    
+                    # Main Line
+                    fig_vix.add_trace(go.Scatter(
+                        x=vix_hist.index, 
+                        y=vix_hist['Close'],
+                        mode='lines',
+                        name='VIX',
+                        line=dict(color=vix_color, width=2)
+                    ))
+                    
+                    # Threshold Lines layout
+                    fig_vix.update_layout(
+                        title=dict(text="VIX History (5Y)", font=dict(size=14)),
+                        height=220,
+                        margin=dict(l=10, r=10, t=30, b=10),
+                        showlegend=False,
+                        xaxis=dict(showgrid=False, showticklabels=False), # Compact
+                        yaxis=dict(showgrid=True, gridcolor='#eee'),
+                        shapes=[
+                            dict(type="line", xref="paper", x0=0, x1=1, yref="y", y0=20, y1=20, line=dict(color="green", width=1, dash="dash"), layer="below"),
+                            dict(type="line", xref="paper", x0=0, x1=1, yref="y", y0=30, y1=30, line=dict(color="red", width=1, dash="dash"), layer="below"),
+                        ]
+                    )
+                    st.plotly_chart(fig_vix, use_container_width=True)
+        else:
+            st.warning("⚠️ VIX Index Unavailable")
+
+    with c_market_2:
+        # --- FEAR & GREED INDEX DISPLAY ---
+        if fng_data:
+            fng_score = fng_data['score']
+            fng_rating = fng_data['rating']
+            fng_timestamp = fng_data['timestamp']
+            
+            # Normalize rating string
+            rating_lower = fng_rating.lower()
+            
+            # Determine Color & Icon
+            if "extreme fear" in rating_lower:
+                fng_color = "#b91c1c" # Dark Red
+                fng_bg = "rgba(185, 28, 28, 0.1)"
+                fng_icon = "😱"
+                fng_th_rating = "กลัวสุดขีด (Extreme Fear)"
+            elif "fear" in rating_lower and "extreme" not in rating_lower:
+                fng_color = "#ef4444" # Red
+                fng_bg = "rgba(239, 68, 68, 0.1)"
+                fng_icon = "😨"
+                fng_th_rating = "กลัว (Fear)"
+            elif "neutral" in rating_lower:
+                fng_color = "#6b7280" # Gray
+                fng_bg = "rgba(107, 114, 128, 0.1)"
+                fng_icon = "😐"
+                fng_th_rating = "เป็นกลาง (Neutral)"
+            elif "extreme greed" in rating_lower:
+                fng_color = "#047857" # Dark Green
+                fng_bg = "rgba(4, 120, 87, 0.1)"
+                fng_icon = "🤑"
+                fng_th_rating = "โลภสุดขีด (Extreme Greed)"
+            else: # greed
+                fng_color = "#10b981" # Green
+                fng_bg = "rgba(16, 185, 129, 0.1)"
+                fng_icon = "🙂"
+                fng_th_rating = "โลภ (Greed)"
+                
+            with st.container():
+                st.markdown(f"""
+                <div style="background-color: {fng_bg}; padding: 15px; border-radius: 10px; border: 1px solid {fng_color}; margin-bottom: 20px;">
+                    <h3 style="margin: 0; color: {fng_color};">🌡️ Fear & Greed Index</h3>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                c_fng1, c_fng2 = st.columns([1, 1.5]) # Adjusted ratio
+                
+                with c_fng1:
+                    st.markdown(f"""
+                    <div style="text-align: center; padding: 5px;">
+                        <div style="font-size: 40px; font-weight: bold; color: {fng_color}; line-height: 1;">
+                            {fng_score:.0f}
+                        </div>
+                        <div style="font-size: 16px; font-weight: bold; color: {fng_color}; margin-top: 5px;">
+                            {fng_icon} {fng_th_rating}
+                        </div>
+                        <div style="font-size: 12px; color: gray; margin-top: 5px;">
+                            Updated: {fng_timestamp[:10]}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                with c_fng2:
+                    # Gauge Chart
+                    fig_fng = go.Figure(go.Indicator(
+                        mode = "gauge+number",
+                        value = fng_score,
+                        domain = {'x': [0, 1], 'y': [0, 1]},
+                        title = {'text': "Sentiment (0-100)", 'font': {'size': 14}},
+                        gauge = {
+                            'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "darkblue"},
+                            'bar': {'color': fng_color},
+                            'bgcolor': "white",
+                            'borderwidth': 2,
+                            'bordercolor': "gray",
+                            'steps': [
+                                {'range': [0, 25], 'color': '#fee2e2'}, # Light Red
+                                {'range': [25, 45], 'color': '#ffedd5'}, # Light Orange
+                                {'range': [45, 55], 'color': '#f3f4f6'}, # Light Gray
+                                {'range': [55, 75], 'color': '#dcfce7'}, # Light Green
+                                {'range': [75, 100], 'color': '#d1fae5'} # Light Emerald
+                            ],
+                            'threshold': {
+                                'line': {'color': "black", 'width': 4},
+                                'thickness': 0.75,
+                                'value': fng_score
+                            }
                         }
-                    }
-                ))
-                fig_fng.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20))
-                st.plotly_chart(fig_fng, use_container_width=True)
+                    ))
+                    fig_fng.update_layout(height=220, margin=dict(l=20, r=20, t=30, b=20))
+                    st.plotly_chart(fig_fng, use_container_width=True)
+        else:
+             st.warning("⚠️ F&G Index Unavailable")
 
     # --- MARKET SENTIMENT ANALYSIS (Combined VIX + F&G) ---
     if vix_data and fng_data:
