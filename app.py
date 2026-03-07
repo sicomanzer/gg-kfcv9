@@ -2283,21 +2283,25 @@ elif page == "💰 พอร์ตปันผล Value Growth":
             c3.metric("ปันผลสุทธิ/ปี (Yearly)", f"{total_income_net*12:,.0f} บาท")
             
             # 2. Charts
-            st.subheader("📈 แนวโน้มเงินปันผล 5 ปีข้างหน้า (Dividend Projection)")
+            chart_c1, chart_c2 = st.columns(2)
             
-            # Line Chart
-            if not projection.empty:
-                fig_proj = px.line(projection, x='Year', y='Monthly_Income', markers=True, 
-                                   title="คาดการณ์เงินปันผลสุทธิต่อเดือน (Projected Monthly Net Income)",
-                                   labels={'Monthly_Income': 'บาท/เดือน', 'Year': 'ปี'})
-                # Add target line
-                fig_proj.add_hline(y=target_used, line_dash="dash", line_color="green", annotation_text="Target")
-                st.plotly_chart(fig_proj, use_container_width=True)
+            with chart_c1:
+                st.subheader("📈 แนวโน้มเงินปันผล 5 ปีข้างหน้า (Dividend Projection)")
+                
+                # Line Chart
+                if not projection.empty:
+                    fig_proj = px.line(projection, x='Year', y='Monthly_Income', markers=True, 
+                                       title="คาดการณ์เงินปันผลสุทธิต่อเดือน (Projected Monthly Net Income)",
+                                       labels={'Monthly_Income': 'บาท/เดือน', 'Year': 'ปี'})
+                    # Add target line
+                    fig_proj.add_hline(y=target_used, line_dash="dash", line_color="green", annotation_text="Target")
+                    st.plotly_chart(fig_proj, use_container_width=True)
             
-            # Pie Chart Allocation
-            st.subheader("🍰 สัดส่วนการลงทุน (Allocation)")
-            fig_pie = px.pie(portfolio, values='Investment', names='Ticker', title=f"Portfolio Allocation ({len(portfolio)} Stocks)", hole=0.4)
-            st.plotly_chart(fig_pie, use_container_width=True)
+            with chart_c2:
+                # Pie Chart Allocation
+                st.subheader("🍰 สัดส่วนการลงทุน (Allocation)")
+                fig_pie = px.pie(portfolio, values='Investment', names='Ticker', title=f"Portfolio Allocation ({len(portfolio)} Stocks)", hole=0.4)
+                st.plotly_chart(fig_pie, use_container_width=True)
             
             # 3. Table
             st.subheader("📋 รายชื่อหุ้นแนะนำ (Recommended Stocks)")
