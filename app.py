@@ -2214,9 +2214,6 @@ elif page == "ตั้งค่า":
         st.cache_data.clear()
 
 elif page == "💰 พอร์ตปันผล Value Growth":
-    st.title("💰 สร้างพอร์ตปันผล Value Growth (50,000 บาท/เดือน)")
-    st.markdown("---")
-    
     # Sidebar inputs for this page
     with st.sidebar:
         st.markdown("### ⚙️ ตั้งค่าพอร์ต (Portfolio Settings)")
@@ -2233,10 +2230,17 @@ elif page == "💰 พอร์ตปันผล Value Growth":
         - สุทธิ: {monthly_target:,.0f} บาท/เดือน
         """)
 
+    st.title(f"💰 สร้างพอร์ตปันผล Value Growth ({monthly_target:,.0f} บาท/เดือน)")
+    st.markdown("---")
+
     st.markdown(f"""
     ### 🎯 เป้าหมาย: สร้าง Cash Flow เดือนละ {monthly_target:,.0f} บาท
     จากเงินลงทุน **{capital:,.0f} บาท** ด้วยหุ้นปันผลคุณภาพสูง (High Quality Dividend Growth)
     """)
+
+    # Initialize session state for portfolio if not exists
+    if 'portfolio_data' not in st.session_state:
+        st.session_state.portfolio_data = None
 
     if st.button("🚀 สร้างพอร์ตปันผลยั่งยืนให้ผม (Create Portfolio)", type="primary", use_container_width=True):
         with st.spinner("กำลังสแกนหาหุ้นปันผลที่ดีที่สุดจากตลาด (SET)... อาจใช้เวลา 1-2 นาที"):
@@ -2245,99 +2249,117 @@ elif page == "💰 พอร์ตปันผล Value Growth":
             # Pass version=3 to force cache invalidation and use new logic
             portfolio, projection, avg_yield, warnings = portfolio_builder.build_dividend_portfolio(universe, capital, monthly_target, risk_level, version=3)
             
-            if not portfolio.empty:
-                # 1. Summary Card
-                st.success("✅ สร้างพอร์ตสำเร็จ!")
-                
-                # Show Warnings
-                for w in warnings:
-                    st.warning(w)
-                
-                total_income_net = portfolio['Monthly_Income_Net'].sum()
-                
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Yield เฉลี่ย (Average Yield)", f"{avg_yield:.2%}") # Use .2% for decimal
-                c2.metric("ปันผลสุทธิ/เดือน (Net Income)", f"{total_income_net:,.0f} บาท", delta=f"{total_income_net - monthly_target:,.0f} vs Target")
-                c3.metric("ปันผลสุทธิ/ปี (Yearly)", f"{total_income_net*12:,.0f} บาท")
-                
-                # 2. Charts
-                st.subheader("📈 แนวโน้มเงินปันผล 5 ปีข้างหน้า (Dividend Projection)")
-                
-                # Line Chart
-                if not projection.empty:
-                    fig_proj = px.line(projection, x='Year', y='Monthly_Income', markers=True, 
-                                       title="คาดการณ์เงินปันผลสุทธิต่อเดือน (Projected Monthly Net Income)",
-                                       labels={'Monthly_Income': 'บาท/เดือน', 'Year': 'ปี'})
-                    # Add target line
-                    fig_proj.add_hline(y=monthly_target, line_dash="dash", line_color="green", annotation_text="Target")
-                    st.plotly_chart(fig_proj, use_container_width=True)
-                
-                # Pie Chart Allocation
-                st.subheader("🍰 สัดส่วนการลงทุน (Allocation)")
-                fig_pie = px.pie(portfolio, values='Investment', names='Ticker', title=f"Portfolio Allocation ({len(portfolio)} Stocks)", hole=0.4)
-                st.plotly_chart(fig_pie, use_container_width=True)
-                
-                # 3. Table
-                st.subheader("📋 รายชื่อหุ้นแนะนำ (Recommended Stocks)")
-                
-                # Format for display
-                # Extract useful metrics for easy understanding
-                portfolio['Payout'] = portfolio['Details'].apply(lambda x: x.get('Payout_Ratio', 0))
-                portfolio['ROE'] = portfolio['Details'].apply(lambda x: x.get('ROE', 0))
-                portfolio['D/E'] = portfolio['Details'].apply(lambda x: x.get('DE_Ratio', 0))
-                portfolio['Annual_Income_Net'] = portfolio['Monthly_Income_Net'] * 12
-                
-                # Calculate Investment Weight
-                total_inv = portfolio['Investment'].sum()
-                portfolio['Weight'] = portfolio['Investment'] / total_inv if total_inv > 0 else 0
+            # Save to session state
+            st.session_state.portfolio_data = {
+                'portfolio': portfolio,
+                'projection': projection,
+                'avg_yield': avg_yield,
+                'warnings': warnings,
+                'monthly_target': monthly_target # Save target to compare later
+            }
 
-                display_df = portfolio[['Ticker', 'Price', 'Score', 'Weight', 'Yield', 'DPS_Growth', 'Payout', 'ROE', 'D/E', 'Shares', 'Investment', 'Monthly_Income_Net', 'Annual_Income_Net']].copy()
-                
-                # Format Percentage
-                for col in ['Yield', 'DPS_Growth', 'Payout', 'ROE', 'Weight']:
-                    display_df[col] = display_df[col].map(lambda x: f"{x:.2%}" if pd.notnull(x) else "-")
-                
-                # Format Numbers
-                display_df['Price'] = display_df['Price'].map('{:,.2f}'.format)
-                display_df['D/E'] = display_df['D/E'].map('{:.2f}'.format)
-                display_df['Shares'] = display_df['Shares'].map('{:,.0f}'.format)
-                display_df['Investment'] = display_df['Investment'].map('{:,.0f}'.format)
-                display_df['Monthly_Income_Net'] = display_df['Monthly_Income_Net'].map('{:,.0f}'.format)
-                display_df['Annual_Income_Net'] = display_df['Annual_Income_Net'].map('{:,.0f}'.format)
-                
-                # Rename columns to Thai
-                display_df = display_df.rename(columns={
-                    'Ticker': 'ชื่อหุ้น',
-                    'Price': 'ราคา',
-                    'Score': 'คะแนน',
-                    'Weight': 'สัดส่วน (%)',
-                    'Yield': 'ปันผล (%)',
-                    'DPS_Growth': 'Growth (%)',
-                    'Payout': 'Payout',
-                    'ROE': 'ROE',
-                    'D/E': 'D/E',
-                    'Shares': 'จำนวนหุ้น',
-                    'Investment': 'เงินลงทุน (บาท)',
-                    'Monthly_Income_Net': 'ปันผลสุทธิ/เดือน',
-                    'Annual_Income_Net': 'ปันผลสุทธิ/ปี'
-                })
-                
-                st.dataframe(display_df, use_container_width=True, hide_index=True)
-                
-                # Details Expander
-                with st.expander("ดูรายละเอียดคะแนน (Scoring Details)"):
-                    st.write("เกณฑ์คะแนน (100 คะแนนเต็ม):")
-                    # Convert details dict to string or json for display
-                    st.dataframe(pd.json_normalize(portfolio['Details']), use_container_width=True)
-
-                # 4. Actions
-                csv = portfolio.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Export Portfolio to Excel/CSV",
-                    data=csv,
-                    file_name='gg_dividend_portfolio.csv',
-                    mime='text/csv',
-                )
+    # Display Results if available
+    if st.session_state.portfolio_data is not None:
+        data = st.session_state.portfolio_data
+        portfolio = data['portfolio']
+        projection = data['projection']
+        avg_yield = data['avg_yield']
+        warnings = data['warnings']
+        target_used = data.get('monthly_target', monthly_target)
             
-            else:
-                st.error("ไม่พบหุ้นที่ผ่านเกณฑ์ หรือข้อมูลไม่เพียงพอ กรุณาลองใหม่อีกครั้ง")
+        if not portfolio.empty:
+            # 1. Summary Card
+            st.success("✅ สร้างพอร์ตสำเร็จ!")
+            
+            # Show Warnings
+            for w in warnings:
+                st.warning(w)
+            
+            total_income_net = portfolio['Monthly_Income_Net'].sum()
+            
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Yield เฉลี่ย (Average Yield)", f"{avg_yield:.2%}") # Use .2% for decimal
+            c2.metric("ปันผลสุทธิ/เดือน (Net Income)", f"{total_income_net:,.0f} บาท", delta=f"{total_income_net - target_used:,.0f} vs Target")
+            c3.metric("ปันผลสุทธิ/ปี (Yearly)", f"{total_income_net*12:,.0f} บาท")
+            
+            # 2. Charts
+            st.subheader("📈 แนวโน้มเงินปันผล 5 ปีข้างหน้า (Dividend Projection)")
+            
+            # Line Chart
+            if not projection.empty:
+                fig_proj = px.line(projection, x='Year', y='Monthly_Income', markers=True, 
+                                   title="คาดการณ์เงินปันผลสุทธิต่อเดือน (Projected Monthly Net Income)",
+                                   labels={'Monthly_Income': 'บาท/เดือน', 'Year': 'ปี'})
+                # Add target line
+                fig_proj.add_hline(y=target_used, line_dash="dash", line_color="green", annotation_text="Target")
+                st.plotly_chart(fig_proj, use_container_width=True)
+            
+            # Pie Chart Allocation
+            st.subheader("🍰 สัดส่วนการลงทุน (Allocation)")
+            fig_pie = px.pie(portfolio, values='Investment', names='Ticker', title=f"Portfolio Allocation ({len(portfolio)} Stocks)", hole=0.4)
+            st.plotly_chart(fig_pie, use_container_width=True)
+            
+            # 3. Table
+            st.subheader("📋 รายชื่อหุ้นแนะนำ (Recommended Stocks)")
+            
+            # Format for display
+            # Extract useful metrics for easy understanding
+            portfolio['Payout'] = portfolio['Details'].apply(lambda x: x.get('Payout_Ratio', 0))
+            portfolio['ROE'] = portfolio['Details'].apply(lambda x: x.get('ROE', 0))
+            portfolio['D/E'] = portfolio['Details'].apply(lambda x: x.get('DE_Ratio', 0))
+            portfolio['Annual_Income_Net'] = portfolio['Monthly_Income_Net'] * 12
+            
+            # Calculate Investment Weight
+            total_inv = portfolio['Investment'].sum()
+            portfolio['Weight'] = portfolio['Investment'] / total_inv if total_inv > 0 else 0
+
+            display_df = portfolio[['Ticker', 'Price', 'Score', 'Weight', 'Yield', 'DPS_Growth', 'Payout', 'ROE', 'D/E', 'Shares', 'Investment', 'Monthly_Income_Net', 'Annual_Income_Net']].copy()
+            
+            # Format Percentage
+            for col in ['Yield', 'DPS_Growth', 'Payout', 'ROE', 'Weight']:
+                display_df[col] = display_df[col].map(lambda x: f"{x:.2%}" if pd.notnull(x) else "-")
+            
+            # Format Numbers
+            display_df['Price'] = display_df['Price'].map('{:,.2f}'.format)
+            display_df['D/E'] = display_df['D/E'].map('{:.2f}'.format)
+            display_df['Shares'] = display_df['Shares'].map('{:,.0f}'.format)
+            display_df['Investment'] = display_df['Investment'].map('{:,.0f}'.format)
+            display_df['Monthly_Income_Net'] = display_df['Monthly_Income_Net'].map('{:,.0f}'.format)
+            display_df['Annual_Income_Net'] = display_df['Annual_Income_Net'].map('{:,.0f}'.format)
+            
+            # Rename columns to Thai
+            display_df = display_df.rename(columns={
+                'Ticker': 'ชื่อหุ้น',
+                'Price': 'ราคา',
+                'Score': 'คะแนน',
+                'Weight': 'สัดส่วน (%)',
+                'Yield': 'ปันผล (%)',
+                'DPS_Growth': 'Growth (%)',
+                'Payout': 'Payout',
+                'ROE': 'ROE',
+                'D/E': 'D/E',
+                'Shares': 'จำนวนหุ้น',
+                'Investment': 'เงินลงทุน (บาท)',
+                'Monthly_Income_Net': 'ปันผลสุทธิ/เดือน',
+                'Annual_Income_Net': 'ปันผลสุทธิ/ปี'
+            })
+            
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            
+            # Details Expander
+            with st.expander("ดูรายละเอียดคะแนน (Scoring Details)"):
+                st.write("เกณฑ์คะแนน (100 คะแนนเต็ม):")
+                # Convert details dict to string or json for display
+                st.dataframe(pd.json_normalize(portfolio['Details']), use_container_width=True)
+
+            # 4. Actions
+            csv = portfolio.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Export Portfolio to Excel/CSV",
+                data=csv,
+                file_name='gg_dividend_portfolio.csv',
+                mime='text/csv',
+            )
+        
+        else:
+            st.error("ไม่พบหุ้นที่ผ่านเกณฑ์ หรือข้อมูลไม่เพียงพอ กรุณาลองใหม่อีกครั้ง")
