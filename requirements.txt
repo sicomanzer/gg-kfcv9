@@ -5,3 +5,4 @@ plotly>=6.5.2
 numpy>=2.4.2
 matplotlib>=3.10.8
 pytz>=2025.2
+requests>=2.31.0
