@@ -230,6 +230,10 @@ def calculate_score(data):
     score += bonus
     details['Score_Bonus'] = bonus
     
+    # Cap total score at 100
+    if score > 100:
+        score = 100
+        
     details['Total_Score'] = score
     
     return score, details

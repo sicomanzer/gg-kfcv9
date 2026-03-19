@@ -426,6 +426,114 @@ def get_stock_data(ticker_symbol):
             
     return None
 
+def get_thaifin_single_stock_deep_data(ticker_symbol):
+    """
+    Fetches full 10-year dataframe from thaifin for deep analysis.
+    """
+    import thaifin
+    import numpy as np
+    import pandas as pd
+    try:
+        t_main = ticker_symbol.replace('.BK', '')
+        stock = thaifin.Stock(t_main)
+        df = stock.yearly_dataframe
+        
+        if df is None or df.empty:
+            return None
+            
+        df = df.replace([np.inf, -np.inf], np.nan)
+        
+        # Format index to int year
+        if hasattr(df.index, 'year'):
+            df.index = df.index.year
+            
+        numeric_cols = ['revenue', 'net_profit', 'earning_per_share', 'dividend_yield', 
+                        'book_value_per_share', 'price_earning_ratio', 'price_book_value', 
+                        'roe', 'roa', 'debt_to_equity', 'gross_profit', 'cash', 'close']
+        
+        for col in numeric_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+                
+        return df.tail(10)
+    except Exception as e:
+        print(f"Error thaifin single stock deep data for {ticker_symbol}: {e}")
+        return None
+
+def get_thaifin_historical_stats(ticker_symbol):
+    """
+    Fetches deep 10-year historical averages and CAGR from thaifin.
+    """
+    import thaifin
+    import numpy as np
+    import pandas as pd
+    try:
+        t_main = ticker_symbol.replace('.BK', '')
+        stock = thaifin.Stock(t_main)
+        df = stock.yearly_dataframe
+        
+        if df is None or df.empty:
+            return None
+            
+        # Replace inf with nan
+        df = df.replace([np.inf, -np.inf], np.nan)
+        
+        # Ensure numeric
+        for col in ['price_earning_ratio', 'price_book_value', 'roe', 'dividend_yield', 'net_profit', 'revenue', 'earning_per_share']:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+        
+        # We want the last 10 years of data
+        df_10y = df.tail(10)
+        
+        # Averages
+        avg_pe = df_10y['price_earning_ratio'].dropna().mean() if 'price_earning_ratio' in df_10y.columns else np.nan
+        avg_pbv = df_10y['price_book_value'].dropna().mean() if 'price_book_value' in df_10y.columns else np.nan
+        avg_roe = df_10y['roe'].dropna().mean() if 'roe' in df_10y.columns else np.nan
+        avg_div_yield = df_10y['dividend_yield'].dropna().mean() if 'dividend_yield' in df_10y.columns else np.nan
+        
+        # CAGR calculations
+        def calculate_cagr(series):
+            s = series.dropna()
+            if len(s) >= 5:
+                # Find first positive and last positive to avoid complex roots
+                # We will just use the first and last available in the 10Y window
+                first_val = s.iloc[0]
+                last_val = s.iloc[-1]
+                years = len(s) - 1
+                if first_val > 0 and last_val > 0 and years > 0:
+                    return (last_val / first_val) ** (1/years) - 1
+            return np.nan
+
+        np_cagr = calculate_cagr(df_10y['net_profit']) if 'net_profit' in df_10y.columns else np.nan
+        rev_cagr = calculate_cagr(df_10y['revenue']) if 'revenue' in df_10y.columns else np.nan
+        eps_cagr = calculate_cagr(df_10y['earning_per_share']) if 'earning_per_share' in df_10y.columns else np.nan
+
+        return {
+            'symbol': ticker_symbol,
+            '10Y_Avg_PE': avg_pe,
+            '10Y_Avg_PBV': avg_pbv,
+            '10Y_Avg_ROE': avg_roe,
+            '10Y_Avg_DivYield': avg_div_yield,
+            '10Y_NP_CAGR': np_cagr,
+            '10Y_Rev_CAGR': rev_cagr,
+            '10Y_EPS_CAGR': eps_cagr,
+            'Data_Years': len(df_10y)
+        }
+    except Exception as e:
+        return None
+
+def get_thaifin_stats_batch(tickers, max_workers=20):
+    import concurrent.futures
+    results = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_ticker = {executor.submit(get_thaifin_historical_stats, t): t for t in tickers}
+        for future in concurrent.futures.as_completed(future_to_ticker):
+            data = future.result()
+            if data:
+                results.append(data)
+    return results
+
 def get_financial_history(ticker_symbol):
     """
     Fetches historical financial statements for plotting.
@@ -1287,11 +1395,22 @@ def fetch_stock_news(ticker_symbol):
         
         formatted_news = []
         if raw_news:
+            # Initialize translator
+            from deep_translator import GoogleTranslator
+            translator = GoogleTranslator(source='auto', target='th')
+            
             for item in raw_news:
                 # New yfinance structure puts data inside 'content'
                 data = item.get('content', item)
                 
-                title = data.get('title', 'No Title')
+                original_title = data.get('title', 'No Title')
+                
+                # Translate title to Thai
+                try:
+                    title = translator.translate(original_title)
+                except Exception as e:
+                    print(f"Translation error: {e}")
+                    title = original_title
                 
                 # Publisher
                 publisher = 'Unknown'
@@ -1334,6 +1453,117 @@ def fetch_stock_news(ticker_symbol):
     except Exception as e:
         print(f"Error fetching news for {ticker_symbol}: {e}")
         return []
+
+def get_thaifin_10y_history(ticker_list, years=10):
+    """
+    Fetches 10-year historical trends (EPS, Dividend, Net Profit, ROE) using thaifin in parallel.
+    Returns: dict {ticker: {'eps_trend': [...], 'div_trend': [...], 'net_trend': [...], 'roe_trend': [...], 'eps_cagr_5y': val, 'eps_cagr_10y': val, 'raw_eps': {year: val}}}
+    """
+    import thaifin
+    import datetime
+    import concurrent.futures
+    import pandas as pd
+    
+    current_year = datetime.datetime.now().year
+    target_years = list(range(current_year - years, current_year))
+    results = {}
+    
+    def fetch_single(ticker):
+        try:
+            t_main = ticker.replace('.BK', '')
+            stock = thaifin.Stock(t_main)
+            df = stock.yearly_dataframe
+            
+            res = {
+                'eps_trend': [0.0]*years,
+                'div_trend': [0.0]*years,
+                'net_trend': [0.0]*years,
+                'roe_trend': [0.0]*years,
+                'raw_eps': {y: 0.0 for y in target_years},
+                'eps_cagr_5y': None,
+                'eps_cagr_10y': None
+            }
+            
+            if df is not None and not df.empty:
+                # Available columns typically include: earning_per_share, dividend_yield, net_profit, roe
+                # Note: thaifin might have dividend_per_share or we use dividend_yield * price? 
+                # thaifin 'dividend' or 'dividend_per_share' column needs to be checked. Usually it's 'dividend'
+                df_years = {}
+                for p, row in df.iterrows():
+                    df_years[p.year] = row
+                
+                eps_list, div_list, net_list, roe_list = [], [], [], []
+                
+                for y in target_years:
+                    if y in df_years:
+                        row = df_years[y]
+                        eps = float(row.get('earning_per_share', 0.0)) if pd.notna(row.get('earning_per_share', 0.0)) else 0.0
+                        
+                        # Try to calculate dividend per share (DPS in Baht)
+                        # thaifin has 'dividend_yield' (%) and 'close' (Price)
+                        div = 0.0
+                        if 'dividend_yield' in row and 'close' in row and pd.notna(row['dividend_yield']) and pd.notna(row['close']):
+                            div = (float(row['dividend_yield']) / 100) * float(row['close'])
+                        elif 'dividend' in row and pd.notna(row['dividend']):
+                            div = float(row['dividend'])
+                        elif 'dividend_per_share' in row and pd.notna(row['dividend_per_share']):
+                            div = float(row['dividend_per_share'])
+                            
+                        net = float(row.get('net_profit', 0.0)) if pd.notna(row.get('net_profit', 0.0)) else 0.0
+                        roe = float(row.get('roe', 0.0)) if pd.notna(row.get('roe', 0.0)) else 0.0
+                        
+                        eps_list.append(eps)
+                        div_list.append(div)
+                        net_list.append(net)
+                        roe_list.append(roe)
+                        res['raw_eps'][y] = eps
+                    else:
+                        eps_list.append(0.0)
+                        div_list.append(0.0)
+                        net_list.append(0.0)
+                        roe_list.append(0.0)
+                
+                res['eps_trend'] = eps_list
+                res['div_trend'] = div_list
+                res['net_trend'] = net_list
+                res['roe_trend'] = roe_list
+                
+                # Calculate CAGR
+                # Filter out zeroes for CAGR calculation
+                valid_eps = [(i, val) for i, val in enumerate(eps_list) if val > 0]
+                if len(valid_eps) >= 2:
+                    # 10Y CAGR
+                    first_idx, first_val = valid_eps[0]
+                    last_idx, last_val = valid_eps[-1]
+                    years_diff = last_idx - first_idx
+                    if years_diff > 0:
+                        res['eps_cagr_10y'] = ((last_val / first_val) ** (1 / years_diff) - 1) * 100
+                
+                # 5Y CAGR (last 5 years)
+                valid_eps_5y = [(i, val) for i, val in enumerate(eps_list[-5:]) if val > 0]
+                if len(valid_eps_5y) >= 2:
+                    first_idx, first_val = valid_eps_5y[0]
+                    last_idx, last_val = valid_eps_5y[-1]
+                    years_diff = last_idx - first_idx
+                    if years_diff > 0:
+                        res['eps_cagr_5y'] = ((last_val / first_val) ** (1 / years_diff) - 1) * 100
+            
+            return ticker, res
+        except Exception as e:
+            print(f"Error fetching thaifin history for {ticker}: {e}")
+            res = {
+                'eps_trend': [0.0]*years, 'div_trend': [0.0]*years, 'net_trend': [0.0]*years, 'roe_trend': [0.0]*years,
+                'raw_eps': {y: 0.0 for y in target_years}, 'eps_cagr_5y': None, 'eps_cagr_10y': None
+            }
+            return ticker, res
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        futures = [executor.submit(fetch_single, t) for t in ticker_list]
+        for future in concurrent.futures.as_completed(futures):
+            t, r = future.result()
+            results[t] = r
+
+    return results
 
 def get_eps_10_years(ticker_list, years=10):
     """

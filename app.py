@@ -211,9 +211,9 @@ page = st.sidebar.radio("ไปยังหน้า", [
 # --- EPS TRENDS PAGE ---
 # --- EPS TRENDS PAGE ---
 if page == "📊 เจาะลึกกำไร 5 ปี (EPS Trends)":
-    st.title("📊 เจาะลึกแนวโน้มกำไรต่อหุ้น (EPS) & อัตราส่วนทางการเงิน")
-    st.markdown("วิเคราะห์ทิศทางกำไรและสุขภาพทางการเงิน (ย้อนหลัง 5 ปี)")
-    st.caption("ℹ️ หมายเหตุ: ข้อมูลย้อนหลังฟรีมักมีเพียง 4-5 ปีล่าสุด (ปีที่ไม่มีข้อมูลจะแสดงเป็นช่องว่าง)")
+    st.title("📊 เจาะลึกแนวโน้มกำไรและสุขภาพทางการเงิน (10-Year Ultimate Trends)")
+    st.markdown("วิเคราะห์ทิศทางกำไร การเติบโต (CAGR) และสุขภาพทางการเงิน **ย้อนหลัง 10 ปี** ด้วยพลังของ `thaifin` + `yfinance`")
+    st.caption("ℹ️ หมายเหตุ: ดึงข้อมูลประวัติศาสตร์ 10 ปี จาก thaifin และดึงราคา/อัตราส่วนปัจจุบันจาก yfinance")
     
     col_filter, col_act = st.columns([2, 1])
     with col_filter:
@@ -233,66 +233,79 @@ if page == "📊 เจาะลึกกำไร 5 ปี (EPS Trends)":
     if "eps_trend_df" not in st.session_state:
         st.session_state["eps_trend_df"] = None
         
-    if st.button("🚀 ดึงข้อมูล (Analyze)", type="primary", disabled=not target_tickers):
-        with st.spinner("กำลังดึงข้อมูลและอัตราส่วนทางการเงิน..."):
+    if st.button("🚀 ดึงข้อมูล Ultimate 10Y (Analyze)", type="primary", disabled=not target_tickers):
+        with st.spinner("กำลังดึงข้อมูล 10 ปีจาก thaifin และผสานข้อมูล yfinance..."):
             import datetime
             import numpy as np
-            # Fetch data (History + Stats)
-            eps_data = utils.get_eps_10_years(target_tickers, years=10)
             
-            if eps_data:
+            # Fetch 10-year deep history from thaifin
+            history_data = utils.get_thaifin_10y_history(target_tickers, years=10)
+            
+            if history_data:
                 current_year = datetime.datetime.now().year
                 target_years = list(range(current_year - 10, current_year))
                 
                 rows = []
-                for sym, info in eps_data.items():
-                    # Handle new structure if implemented in utils, or fallback
-                    # In utils step, we changed result format to {'history': {}, 'stats': {}}
-                    history = info.get('history', {})
-                    stats = info.get('stats', {})
-                    
-                    if not history and not stats: continue
+                for sym in target_tickers:
+                    info = history_data.get(sym, {})
+                    if not info: continue
                     
                     row = {'Symbol': sym}
                     
-                    # --- Financial Stats ---
-                    row['Price'] = stats.get('Price')
-                    row['P/E'] = stats.get('P/E')
-                    row['P/BV'] = stats.get('P/BV')
-                    row['D/E'] = stats.get('D/E')
-                    
-                    # Convert to % (multiply by 100)
-                    roa = stats.get('ROA')
-                    row['ROA %'] = roa * 100 if roa is not None else None
-                    
-                    roe = stats.get('ROE')
-                    row['ROE %'] = roe * 100 if roe is not None else None
-                    
-                    row['DPS'] = stats.get('DPS')
-                    
-                    yld = stats.get('DivYield')
-                    row['Yield %'] = yld * 100 if yld is not None else None
-                    
-                    # --- History ---
-                    trend = []
-                    for y in target_years:
-                        val = history.get(y, None)
-                        row[str(y)] = val
+                    # Fetch current stats from global df (already loaded via yfinance)
+                    if not df.empty and sym in df['symbol'].values:
+                        sym_df = df[df['symbol'] == sym].iloc[0]
+                        row['Price'] = sym_df.get('price', None)
                         
-                        # Sanitize value for Sparkline
-                        if val is None or pd.isna(val):
-                            trend_val = 0.0
-                        else:
-                            trend_val = float(val)
-                        trend.append(trend_val)
+                        # Calculate real P/E and P/BV from df if available, else use what's there
+                        pe = sym_df.get('valuation_pe', None)
+                        if pd.isna(pe) and pd.notna(sym_df.get('trailingEps')) and sym_df['trailingEps'] > 0:
+                            pe = sym_df['price'] / sym_df['trailingEps']
+                            
+                        row['P/E'] = pe
+                        
+                        pbv = None
+                        if pd.notna(sym_df.get('bookValue')) and sym_df['bookValue'] > 0:
+                            pbv = sym_df['price'] / sym_df['bookValue']
+                        row['P/BV'] = pbv
+                        
+                        de = sym_df.get('debtToEquity', None)
+                        row['D/E'] = de / 100 if pd.notna(de) else None  # yfinance returns % for D/E
+                        
+                        roa = sym_df.get('returnOnAssets', None)
+                        row['ROA %'] = roa * 100 if pd.notna(roa) else None
+                        
+                        roe = sym_df.get('returnOnEquity', None)
+                        row['ROE %'] = roe * 100 if pd.notna(roe) else None
+                        
+                        row['DPS'] = sym_df.get('dividendRate', None)
+                        
+                        yld = sym_df.get('dividendYield', None)
+                        row['Yield %'] = yld * 100 if pd.notna(yld) else None
+                    else:
+                        # Fallback
+                        row.update({'Price': None, 'P/E': None, 'P/BV': None, 'D/E': None, 'ROA %': None, 'ROE %': None, 'DPS': None, 'Yield %': None})
                     
-                    row['Trend'] = trend
+                    # Add Trends & CAGRs
+                    row['EPS Trend'] = info.get('eps_trend', [0.0]*10)
+                    row['Div Trend'] = info.get('div_trend', [0.0]*10)
+                    row['Net Profit Trend'] = info.get('net_trend', [0.0]*10)
+                    row['ROE Trend'] = info.get('roe_trend', [0.0]*10)
+                    
+                    row['EPS CAGR 5Y'] = info.get('eps_cagr_5y', None)
+                    row['EPS CAGR 10Y'] = info.get('eps_cagr_10y', None)
+                    
+                    # Add Raw EPS History
+                    raw_eps = info.get('raw_eps', {})
+                    for y in target_years:
+                        row[str(y)] = raw_eps.get(y, 0.0)
+                        
                     rows.append(row)
                     
                 if rows:
                     df_res = pd.DataFrame(rows)
                     # Convert columns to numeric
-                    cols_to_numeric = [str(y) for y in target_years] + ['Price', 'P/E', 'P/BV', 'D/E', 'ROA %', 'ROE %', 'DPS', 'Yield %']
+                    cols_to_numeric = [str(y) for y in target_years] + ['Price', 'P/E', 'P/BV', 'D/E', 'ROA %', 'ROE %', 'DPS', 'Yield %', 'EPS CAGR 5Y', 'EPS CAGR 10Y']
                     for col in cols_to_numeric:
                         if col in df_res.columns:
                             df_res[col] = pd.to_numeric(df_res[col], errors='coerce')
@@ -319,17 +332,20 @@ if page == "📊 เจาะลึกกำไร 5 ปี (EPS Trends)":
             "P/E": st.column_config.NumberColumn("P/E", format="%.2f", width="small"),
             "P/BV": st.column_config.NumberColumn("P/BV", format="%.2f", width="small"),
             "D/E": st.column_config.NumberColumn("D/E", format="%.2f", width="small"),
-            "ROA %": st.column_config.NumberColumn("ROA %", format="%.2f%%", width="small"),
             "ROE %": st.column_config.NumberColumn("ROE %", format="%.2f%%", width="small"),
-            "DPS": st.column_config.NumberColumn("DPS (ปันผล)", format="%.2f", width="small"),
             "Yield %": st.column_config.NumberColumn("Yield %", format="%.2f%%", width="small"),
-            "Trend": st.column_config.BarChartColumn("Trend (10Y)", width="small"),
+            "EPS CAGR 5Y": st.column_config.NumberColumn("CAGR (5Y)", format="%.2f%%", width="small"),
+            "EPS CAGR 10Y": st.column_config.NumberColumn("CAGR (10Y)", format="%.2f%%", width="small"),
+            "EPS Trend": st.column_config.BarChartColumn("EPS Trend (10Y)", width="small"),
+            "Div Trend": st.column_config.BarChartColumn("Dividend (10Y)", width="small"),
+            "Net Profit Trend": st.column_config.BarChartColumn("Net Profit (10Y)", width="small"),
+            "ROE Trend": st.column_config.LineChartColumn("ROE (10Y)", width="small"),
         }
         for y in target_years:
             cfg[str(y)] = st.column_config.NumberColumn(str(y), format="%.2f", width="small")
             
-        # Define column order explicitly: Symbol | Trend | Stats | History
-        cols = ["Symbol", "Trend", "Price", "P/E", "P/BV", "Yield %", "D/E", "ROE %", "ROA %", "DPS"] + [str(y) for y in target_years]
+        # Define column order explicitly: Symbol | Trends | CAGRs | Stats | History
+        cols = ["Symbol", "EPS Trend", "Net Profit Trend", "Div Trend", "ROE Trend", "EPS CAGR 5Y", "EPS CAGR 10Y", "Price", "P/E", "P/BV", "Yield %", "ROE %"] + [str(y) for y in target_years]
         
         # Filter existing columns only
         valid_cols = [c for c in cols if c in df_show.columns]
@@ -1177,6 +1193,109 @@ if page == "📊 แดชบอร์ดภาพรวม":
                 use_container_width=True
             )
 
+        # --- ULTIMATE DASHBOARD (yfinance + thaifin) ---
+        st.markdown("---")
+        st.header("🏆 Ultimate Dashboard: เจาะลึกหุ้นแชมป์เปี้ยน 10 ปี (yfinance + thaifin)")
+        st.markdown("ผสานข้อมูลแบบ Real-time (yfinance) เข้ากับประวัติศาสตร์ 10 ปี (thaifin) เพื่อค้นหาเพชรแท้ในตลาดหุ้นไทย")
+        
+        @st.cache_data(ttl=86400)
+        def load_thaifin_historical_data(tickers):
+            return pd.DataFrame(utils.get_thaifin_stats_batch(tickers))
+
+        is_expanded = st.session_state.get('load_ultimate', False)
+        with st.expander("🚀 เจาะลึกหุ้นแชมป์เปี้ยน 10 ปี (อาจใช้เวลาโหลด 10-20 วินาทีในครั้งแรก)", expanded=is_expanded):
+            if not is_expanded:
+                if st.button("เริ่มประมวลผลข้อมูล 10 ปี (yfinance + thaifin)"):
+                    st.session_state['load_ultimate'] = True
+                    st.rerun()
+                
+            if st.session_state.get('load_ultimate', False):
+                with st.spinner("กำลังดึงและคำนวณข้อมูล 10 ปีย้อนหลัง..."):
+                    tf_df = load_thaifin_historical_data(df['symbol'].tolist())
+                    
+                if not tf_df.empty:
+                    # Merge data
+                    merged_df = pd.merge(df, tf_df, on='symbol', how='inner')
+                    
+                    # Filter valid PE
+                    import numpy as np
+                    merged_df['PE_Discount'] = np.where(
+                        (merged_df['P/E_raw'] > 0) & (merged_df['10Y_Avg_PE'] > 0) & (merged_df['P/E_raw'] < 100),
+                        (merged_df['10Y_Avg_PE'] - merged_df['P/E_raw']) / merged_df['10Y_Avg_PE'],
+                        -999
+                    )
+                    
+                    tab1, tab2, tab3 = st.tabs(["📉 P/E Discount", "🚀 Growth Kings", "💰 Consistent Dividends"])
+                    
+                    with tab1:
+                        st.subheader("10 หุ้นที่ P/E ปัจจุบัน ถูกกว่าค่าเฉลี่ย 10 ปี มากที่สุด")
+                        st.markdown("เหมาะสำหรับสาย Value Investor (VI) ที่ชอบซื้อหุ้นดีในเวลาที่คนอื่นเมิน")
+                        top_discount = merged_df[merged_df['PE_Discount'] != -999].sort_values('PE_Discount', ascending=False).head(10)
+                        if not top_discount.empty:
+                            fig_discount = go.Figure()
+                            fig_discount.add_trace(go.Bar(
+                                x=top_discount['symbol'],
+                                y=top_discount['10Y_Avg_PE'],
+                                name='P/E เฉลี่ย 10 ปี',
+                                marker_color='lightgray'
+                            ))
+                            fig_discount.add_trace(go.Bar(
+                                x=top_discount['symbol'],
+                                y=top_discount['P/E_raw'],
+                                name='P/E ปัจจุบัน (yfinance)',
+                                marker_color='#10b981',
+                                text=[f"-{x*100:.0f}%" if x > 0 else f"+{abs(x)*100:.0f}%" for x in top_discount['PE_Discount']],
+                                textposition='auto'
+                            ))
+                            fig_discount.update_layout(barmode='group', height=400, title="เปรียบเทียบ P/E ปัจจุบัน vs 10 ปี (ยิ่งแท่งเขียวต่ำกว่าสีเทา ยิ่งถูก)")
+                            st.plotly_chart(fig_discount, use_container_width=True)
+                    
+                    with tab2:
+                        st.subheader("10 หุ้นเติบโต (Compounders) กำไรโตเฉลี่ยสูงสุด 10 ปี")
+                        st.markdown("หุ้นที่มีอัตราการเติบโตของกำไรสุทธิ (CAGR) สม่ำเสมอตลอด 1 ทศวรรษ")
+                        growth_df = merged_df[merged_df['10Y_NP_CAGR'] > 0].sort_values('10Y_NP_CAGR', ascending=False).head(10)
+                        if not growth_df.empty:
+                            fig_growth = px.bar(
+                                growth_df, x='symbol', y='10Y_NP_CAGR', 
+                                text_auto='.1%', color='VI Score',
+                                color_continuous_scale='Blues',
+                                title="Net Profit CAGR (10 Years)"
+                            )
+                            fig_growth.update_layout(height=400)
+                            st.plotly_chart(fig_growth, use_container_width=True)
+                            
+                    with tab3:
+                        st.subheader("สุดยอดหุ้นปันผลแกร่ง (Dividend Aristocrats)")
+                        st.markdown("หุ้นที่จ่ายปันผลเฉลี่ย 10 ปีสูง และปัจจุบันก็ยังให้ Yield ที่น่าสนใจ")
+                        
+                        # Compute current yield properly
+                        def get_current_yield(row):
+                            y = row.get('dividendYield', 0)
+                            if pd.isna(y): return 0
+                            return y if y > 1 else y * 100
+                            
+                        merged_df['curr_yield_pct'] = merged_df.apply(get_current_yield, axis=1)
+                        merged_df['Div_Score'] = (merged_df['10Y_Avg_DivYield'] * 100) + merged_df['curr_yield_pct']
+                        
+                        div_df = merged_df[(merged_df['10Y_Avg_DivYield'] > 0.03)].sort_values('Div_Score', ascending=False).head(10)
+                        
+                        if not div_df.empty:
+                            fig_div = go.Figure()
+                            fig_div.add_trace(go.Bar(
+                                x=div_df['symbol'],
+                                y=div_df['10Y_Avg_DivYield'] * 100,
+                                name='Yield เฉลี่ย 10 ปี (%)',
+                                marker_color='#93c5fd'
+                            ))
+                            fig_div.add_trace(go.Bar(
+                                x=div_df['symbol'],
+                                y=div_df['curr_yield_pct'],
+                                name='Yield ปัจจุบัน (%)',
+                                marker_color='#3b82f6'
+                            ))
+                            fig_div.update_layout(barmode='group', height=400, title="เปรียบเทียบ Dividend Yield ปัจจุบัน vs 10 ปี")
+                            st.plotly_chart(fig_div, use_container_width=True)
+
         # Main Screener Results
         st.markdown("---")
         st.subheader(f"ผลการคัดกรองหุ้นทั้งหมด (พบ: {len(filtered_df)} ตัว)")
@@ -1281,10 +1400,12 @@ if page == "📊 แดชบอร์ดภาพรวม":
                 mask_buy = x['สถานะ'] == 'Buy'
                 mask_sell = x['สถานะ'] == 'Sell'
                 mask_hold = x['สถานะ'] == 'Hold'
-                df_st.loc[mask_sbuy, 'สถานะ'] = 'background-color: #10b981; color: white; font-weight: bold'
-                df_st.loc[mask_buy, 'สถานะ'] = 'background-color: #d1fae5; color: #065f46; font-weight: bold'
-                df_st.loc[mask_sell, 'สถานะ'] = 'background-color: #fee2e2; color: #991b1b; font-weight: bold'
-                df_st.loc[mask_hold, 'สถานะ'] = 'background-color: #fef3c7; color: #92400e'
+                
+                # ปรับสีให้ชัดเจนและอ่านง่ายขึ้น
+                df_st.loc[mask_sbuy, 'สถานะ'] = 'background-color: #059669; color: white; font-weight: bold; text-align: center; border-radius: 4px;' # Darker green
+                df_st.loc[mask_buy, 'สถานะ'] = 'background-color: #34d399; color: #064e3b; font-weight: bold; text-align: center; border-radius: 4px;'   # Lighter green
+                df_st.loc[mask_sell, 'สถานะ'] = 'background-color: #ef4444; color: white; font-weight: bold; text-align: center; border-radius: 4px;'  # Red
+                df_st.loc[mask_hold, 'สถานะ'] = 'background-color: #fbbf24; color: #78350f; font-weight: bold; text-align: center; border-radius: 4px;'  # Amber/Yellow
             return df_st
 
         # Apply formatting
@@ -1762,6 +1883,9 @@ elif page == "🔍 วิเคราะห์หุ้นรายตัว":
             fin_hist = utils.get_financial_history(selected_ticker)
             
             if valuation:
+                # Fetch thaifin deep data
+                tf_deep_df = utils.get_thaifin_single_stock_deep_data(selected_ticker)
+                
                 # --- HEADER SECTION ---
                 st.markdown(f"## {valuation['longName']} ({valuation['symbol']})")
                 st.markdown(f"**อุตสาหกรรม:** {valuation.get('sector')} | **ธุรกิจ:** {valuation.get('summary')[:150]}...")
@@ -1833,37 +1957,127 @@ elif page == "🔍 วิเคราะห์หุ้นรายตัว":
                 
                 # --- FINANCIAL TRENDS & FORECAST ---
                 st.markdown("---")
-                st.subheader("📈 ผลประกอบการย้อนหลัง & คาดการณ์อนาคต")
-                st.info("ℹ️ **หมายเหตุข้อมูล:** ข้อมูลย้อนหลังประมาณ 4 ปีล่าสุด | ตัวเลขคาดการณ์อ้างอิงจากบทวิเคราะห์ (Analyst Estimates)")
+                st.subheader("📈 ผลประกอบการย้อนหลัง & คาดการณ์อนาคต (Ultimate 10-Year Insights)")
+                st.info("ℹ️ **การทำงานร่วมกัน:** ข้อมูลประวัติศาสตร์ยาว 10 ปี จาก `thaifin` (ทำให้เห็นภาพวัฏจักรธุรกิจชัดเจน) ผสมผสานกับข้อมูลคาดการณ์อนาคตจากนักวิเคราะห์ (`yfinance`)")
                 
                 # Tabs for different views
-                tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 การเติบโต & กำไร", "💪 ประสิทธิภาพการทำกำไร", "🔮 คาดการณ์อนาคต", "📉 PE Band & Matrix", "📰 ข่าวล่าสุด"])
+                tab_10y_1, tab_10y_2, tab_10y_3, tab_yf_1, tab_yf_2, tab_yf_3, tab_yf_4, tab_yf_5 = st.tabs([
+                    "👑 รายได้ & กำไร (10 ปี)", 
+                    "💎 อัตราส่วนทางการเงิน (10 ปี)", 
+                    "💰 ประวัติปันผล (10 ปี)",
+                    "📊 การเติบโต (4 ปีล่าสุด)", 
+                    "💪 ประสิทธิภาพ (4 ปีล่าสุด)",
+                    "🔮 คาดการณ์อนาคต", 
+                    "📉 PE Band & Matrix", 
+                    "📰 ข่าวล่าสุด"
+                ])
                 
-                if not fin_hist.empty:
-                    with tab1:
-                        # Revenue & Profit Combo
-                        f1, f2 = st.columns(2)
-                        with f1:
-                            fig_fin = go.Figure()
-                            fig_fin.add_trace(go.Bar(x=fin_hist.index, y=fin_hist['Revenue'], name='รายได้ (Revenue)', marker_color='#60a5fa'))
-                            fig_fin.add_trace(go.Scatter(x=fin_hist.index, y=fin_hist['Net Profit'], name='กำไรสุทธิ (Net Profit)', mode='lines+markers', line=dict(color='#10b981', width=3)))
-                            fig_fin.update_layout(title="แนวโน้มรายได้ vs กำไรสุทธิ", legend=dict(orientation="h"))
-                            st.plotly_chart(fig_fin, use_container_width=True)
+                if tf_deep_df is not None and not tf_deep_df.empty:
+                    with tab_10y_1:
+                        st.markdown("##### 📊 แนวโน้มรายได้ และกำไรสุทธิ ย้อนหลัง 10 ปี")
+                        fig_10y_growth = go.Figure()
+                        fig_10y_growth.add_trace(go.Bar(
+                            x=tf_deep_df.index, y=tf_deep_df['revenue'],
+                            name='รายได้รวม (Revenue)', marker_color='#93c5fd'
+                        ))
+                        fig_10y_growth.add_trace(go.Scatter(
+                            x=tf_deep_df.index, y=tf_deep_df['net_profit'],
+                            name='กำไรสุทธิ (Net Profit)', mode='lines+markers',
+                            line=dict(color='#10b981', width=3), marker=dict(size=8)
+                        ))
+                        fig_10y_growth.update_layout(
+                            barmode='group', height=400,
+                            xaxis=dict(tickmode='linear', dtick=1),
+                            hovermode="x unified"
+                        )
+                        st.plotly_chart(fig_10y_growth, use_container_width=True)
+                        
+                    with tab_10y_2:
+                        st.markdown("##### 📈 อัตราส่วนความสามารถในการทำกำไร (ROE & ROA) ย้อนหลัง 10 ปี")
+                        fig_10y_eff = go.Figure()
+                        if 'roe' in tf_deep_df.columns:
+                            fig_10y_eff.add_trace(go.Scatter(
+                                x=tf_deep_df.index, y=tf_deep_df['roe'],
+                                name='ROE (%)', mode='lines+markers',
+                                line=dict(color='#3b82f6', width=3)
+                            ))
+                        if 'roa' in tf_deep_df.columns:
+                            fig_10y_eff.add_trace(go.Scatter(
+                                x=tf_deep_df.index, y=tf_deep_df['roa'],
+                                name='ROA (%)', mode='lines+markers',
+                                line=dict(color='#f59e0b', width=3)
+                            ))
+                        fig_10y_eff.update_layout(
+                            height=400, yaxis_title="เปอร์เซ็นต์ (%)",
+                            xaxis=dict(tickmode='linear', dtick=1),
+                            hovermode="x unified"
+                        )
+                        st.plotly_chart(fig_10y_eff, use_container_width=True)
+                        
+                        st.markdown("##### ⚖️ ประวัติความถูกแพง (P/E & P/BV) ย้อนหลัง 10 ปี")
+                        c_pe, c_pbv = st.columns(2)
+                        with c_pe:
+                            fig_pe = px.line(tf_deep_df, x=tf_deep_df.index, y='price_earning_ratio', markers=True, title="P/E Ratio History")
+                            if not tf_deep_df['price_earning_ratio'].isna().all():
+                                avg_pe = tf_deep_df['price_earning_ratio'].mean()
+                                fig_pe.add_hline(y=avg_pe, line_dash="dash", line_color="red", annotation_text=f"Avg PE: {avg_pe:.2f}")
+                            st.plotly_chart(fig_pe, use_container_width=True)
+                        with c_pbv:
+                            fig_pbv = px.line(tf_deep_df, x=tf_deep_df.index, y='price_book_value', markers=True, title="P/BV Ratio History")
+                            if not tf_deep_df['price_book_value'].isna().all():
+                                avg_pbv = tf_deep_df['price_book_value'].mean()
+                                fig_pbv.add_hline(y=avg_pbv, line_dash="dash", line_color="red", annotation_text=f"Avg PBV: {avg_pbv:.2f}")
+                            st.plotly_chart(fig_pbv, use_container_width=True)
                             
-                        with f2:
-                            # EPS Trend
-                            if 'EPS' in fin_hist.columns:
-                                fig_eps = px.bar(fin_hist, x=fin_hist.index, y='EPS', title="กำไรต่อหุ้น (EPS)", text_auto='.2f')
-                                fig_eps.update_traces(marker_color='#8b5cf6')
-                                st.plotly_chart(fig_eps, use_container_width=True)
-                                
-                    with tab2:
-                        # Ratios Triple Chart
-                        pass # Content continues below...
+                    with tab_10y_3:
+                        st.markdown("##### 💵 ประวัติการจ่ายปันผล (Dividend Yield) ย้อนหลัง 10 ปี")
+                        fig_div = go.Figure()
+                        fig_div.add_trace(go.Bar(
+                            x=tf_deep_df.index, y=tf_deep_df['dividend_yield'],
+                            name='Dividend Yield (%)', marker_color='#8b5cf6',
+                            text=[f"{y:.2f}%" if pd.notna(y) else "" for y in tf_deep_df['dividend_yield']],
+                            textposition='auto'
+                        ))
+                        fig_div.update_layout(
+                            height=400, yaxis_title="Yield (%)",
+                            xaxis=dict(tickmode='linear', dtick=1)
+                        )
+                        st.plotly_chart(fig_div, use_container_width=True)
+                else:
+                    st.warning("ไม่สามารถโหลดข้อมูลประวัติศาสตร์ 10 ปีจาก thaifin ได้")
+                
+                # Forecasting (yfinance)
+                with tab_yf_1:
+                    if not fin_hist.empty:
+                        # Revenue & Profit Combo
+                        fig_growth = go.Figure()
+                        fig_growth.add_trace(go.Bar(
+                            x=fin_hist.index, y=fin_hist.get('Revenue', []),
+                            name='รายได้ (Revenue)', marker_color='lightblue'
+                        ))
+                        fig_growth.add_trace(go.Scatter(
+                            x=fin_hist.index, y=fin_hist.get('Net Income', []),
+                            name='กำไรสุทธิ (Net Income)', mode='lines+markers',
+                            line=dict(color='green', width=3), marker=dict(size=8)
+                        ))
+                        fig_growth.update_layout(barmode='group', title="รายได้ และ กำไรสุทธิ (4 ปีล่าสุด - yfinance)", height=400)
+                        st.plotly_chart(fig_growth, use_container_width=True)
+                    else:
+                        st.info("ไม่มีข้อมูลการเติบโต 4 ปีล่าสุดจาก yfinance")
+                        
+                    st.markdown("##### 🔮 คาดการณ์กำไรล่วงหน้า (Forward EPS)")
+                    f_eps = valuation.get('forwardEps', 0)
+                    t_eps = valuation.get('trailingEps', 0)
+                    if f_eps and t_eps and t_eps > 0:
+                        growth_pct = ((f_eps - t_eps) / t_eps) * 100
+                        st.metric("คาดการณ์การเติบโตของกำไรปีหน้า (EPS Growth YoY)", f"{growth_pct:.2f}%", 
+                                  f"EPS: ฿{t_eps:.2f} ➡️ ฿{f_eps:.2f}")
+                    else:
+                        st.caption("ไม่มีข้อมูลคาดการณ์จากนักวิเคราะห์")
                 
                 # --- CONTENT FOR MAIN TAB 1 CONTINUED ---
                 with st.container():
-                    with tab2:
+                    with tab_yf_2:
                         r1, r2, r3 = st.columns(3)
                         
                         with r1:
@@ -1884,7 +2098,7 @@ elif page == "🔍 วิเคราะห์หุ้นรายตัว":
                                 fig_de.update_traces(marker_color='#64748b')
                                 st.plotly_chart(fig_de, use_container_width=True)
                 
-                    with tab3:
+                    with tab_yf_3:
                         # Forecast Logic
                         # We have Trailing EPS and Forward EPS.
                         # Let's project 2 years
@@ -1919,7 +2133,7 @@ elif page == "🔍 วิเคราะห์หุ้นรายตัว":
                         else:
                             st.info("ไม่มีข้อมูลประมาณการจากนักวิเคราะห์")
                     
-                    with tab4:
+                    with tab_yf_4:
                         st.subheader("📉 Historical PE Band")
                         st.info("กราฟแสดงราคาหุ้นเทียบกับกรอบราคาที่คิดจากค่า PE ย้อนหลัง 5 ปี (ช่วยดูว่าตอนนี้ถูกหรือแพงเมื่อเทียบกับตัวเองในอดีต)")
                         
@@ -1947,7 +2161,7 @@ elif page == "🔍 วิเคราะห์หุ้นรายตัว":
                         else:
                              st.error("ข้อมูลไม่เพียงพอสำหรับสร้าง PE Band (ต้องการกำไรย้อนหลังต่อเนื่อง)")
 
-                with tab5:
+                with tab_yf_5:
                     # News Section
                     st.markdown("##### 📰 ข่าวล่าสุด (Latest News)")
                     st.caption("ดึงข้อมูลข่าวจาก Yahoo Finance")
@@ -2072,154 +2286,251 @@ elif page == "⚖️ เปรียบเทียบคู่แข่ง":
                 st.dataframe(comp_table.style.format("{:.2f}").background_gradient(axis=1), use_container_width=True)
                 
                 # 2. Historical Charts Comparison
-                st.subheader("📈 กราฟวัดพลังย้อนหลัง")
+                st.subheader("📈 กราฟวัดพลังย้อนหลัง (Ultimate 10-Year Analysis)")
+                st.info("ℹ️ ดึงข้อมูลประวัติศาสตร์ 10 ปี จาก **thaifin** เพื่อการเปรียบเทียบที่เห็นรอบวัฏจักรที่แท้จริง")
                 
-                # We need to fetch history for each
-                hist_data = {}
-                metrics = ['Revenue', 'Net Profit', 'ROE (%)', 'NPM (%)']
-                
-                # Fetch history logic
-                # For charts we need a combined dataframe
+                # We need to fetch history for each from thaifin
                 combined_hist = pd.DataFrame()
                 
-                for t in selected_tickers:
-                     h = utils.get_financial_history(t)
-                     if not h.empty:
-                         h['Symbol'] = t
-                         combined_hist = pd.concat([combined_hist, h])
+                with st.spinner("กำลังดึงข้อมูล 10 ปี จาก thaifin..."):
+                    for t in selected_tickers:
+                         h = utils.get_thaifin_single_stock_deep_data(t)
+                         if h is not None and not h.empty:
+                             h['Symbol'] = t
+                             combined_hist = pd.concat([combined_hist, h])
                 
                 if not combined_hist.empty:
+                    # Rename columns for display
+                    rename_map = {
+                        'revenue': 'รายได้รวม (Revenue)',
+                        'net_profit': 'กำไรสุทธิ (Net Profit)',
+                        'roe': 'ROE (%)',
+                        'roa': 'ROA (%)',
+                        'dividend_yield': 'Dividend Yield (%)',
+                        'price_earning_ratio': 'P/E Ratio',
+                        'price_book_value': 'P/BV Ratio',
+                        'gross_profit': 'กำไรขั้นต้น (Gross Profit)'
+                    }
+                    combined_hist = combined_hist.rename(columns=rename_map)
+                    metrics = [m for m in rename_map.values() if m in combined_hist.columns]
+                    
                     # Choose Metric to compare
-                    metric_choice = st.radio("เลือกหัวข้อเปรียบเทียบ", metrics, horizontal=True)
+                    metric_choice = st.selectbox("เลือกหัวข้อเปรียบเทียบ", metrics)
                     
                     if metric_choice in combined_hist.columns:
-                        fig_comp = px.bar(combined_hist, x=combined_hist.index, y=metric_choice, color='Symbol', barmode='group', title=f"เปรียบเทียบ {metric_choice}")
+                        # Bar chart for absolute values, Line chart for ratios
+                        if metric_choice in ['รายได้รวม (Revenue)', 'กำไรสุทธิ (Net Profit)', 'กำไรขั้นต้น (Gross Profit)']:
+                            fig_comp = px.bar(combined_hist, x=combined_hist.index, y=metric_choice, color='Symbol', barmode='group', title=f"เปรียบเทียบ {metric_choice} ย้อนหลัง 10 ปี")
+                        else:
+                            fig_comp = px.line(combined_hist, x=combined_hist.index, y=metric_choice, color='Symbol', markers=True, title=f"เปรียบเทียบ {metric_choice} ย้อนหลัง 10 ปี")
+                            
+                        fig_comp.update_layout(xaxis=dict(tickmode='linear', dtick=1), hovermode="x unified")
                         st.plotly_chart(fig_comp, use_container_width=True)
+                        
+                        # Show summary stats
+                        st.markdown(f"**ค่าสถิติย้อนหลัง 10 ปีของ {metric_choice}:**")
+                        
+                        summary_rows = []
+                        for sym in combined_hist['Symbol'].unique():
+                            sym_data = combined_hist[combined_hist['Symbol'] == sym].sort_index()
+                            # dropna for this metric
+                            sym_data = sym_data.dropna(subset=[metric_choice])
+                            if not sym_data.empty:
+                                mean_val = sym_data[metric_choice].mean()
+                                first_val = sym_data[metric_choice].iloc[0]
+                                last_val = sym_data[metric_choice].iloc[-1]
+                                n_years = len(sym_data) - 1
+                                
+                                cagr = None
+                                # Calculate CAGR only if valid (positive start/end values and >0 years)
+                                if n_years > 0 and first_val > 0 and last_val > 0:
+                                    cagr = ((last_val / first_val) ** (1 / n_years) - 1) * 100
+                                
+                                summary_rows.append({
+                                    'หุ้น': sym,
+                                    'ค่าเฉลี่ย 10 ปี': mean_val,
+                                    'CAGR (%)': cagr if cagr is not None else float('nan')
+                                })
+                                
+                        if summary_rows:
+                            avg_df = pd.DataFrame(summary_rows)
+                            # format NaN as N/A
+                            st.dataframe(
+                                avg_df.style.format({
+                                    'ค่าเฉลี่ย 10 ปี': '{:.2f}', 
+                                    'CAGR (%)': lambda x: f"{x:.2f}%" if pd.notna(x) else "N/A"
+                                }).background_gradient(subset=['CAGR (%)'], cmap='RdYlGn', vmin=-20, vmax=20),
+                                hide_index=True,
+                                use_container_width=True
+                            )
+                        
                     else:
                         st.info(f"ไม่มีข้อมูล {metric_choice}")
                 else:
-                    st.error("ไม่สามารถดึงข้อมูลย้อนหลังได้")
-
-
-                    st.error("ไม่สามารถดึงข้อมูลย้อนหลังได้")
+                    st.error("ไม่สามารถดึงข้อมูลย้อนหลัง 10 ปีได้")
 
 
 elif page == "💡 แนะนำพอร์ตการลงทุน":
-    st.title("🍰 แนะนำพอร์ตการลงทุน (Asset Allocation)")
+    st.title("🍰 แนะนำพอร์ตการลงทุน (Ultimate AI Asset Allocation)")
+    st.markdown("จัดพอร์ตอัตโนมัติตามระดับความเสี่ยง พร้อมคัดเลือกหุ้นที่ดีที่สุดในแต่ละกลุ่มจากฐานข้อมูลแบบ Real-time และวิเคราะห์ความแกร่งย้อนหลัง 10 ปี")
     
-    st.markdown("สร้างพอร์ตการลงทุนที่สมดุล ตามหลักการกระจายความเสี่ยง")
-    
-    # Input with cleaner integer format (Note: Commas in input fields are not supported by Streamlit for editing, so we show a caption)
-    capital = st.number_input("เงินลงทุนตั้งต้น (บาท)", min_value=1000, value=100000, step=1000, format="%d")
-    st.caption(f"💰 จำนวนเงินที่ระบุ: **{capital:,.0f}** บาท")
+    # Input
+    capital = st.number_input("เงินลงทุนตั้งต้น (บาท)", min_value=10000, value=100000, step=10000, format="%d")
     
     # Risk Profile Selector
     st.markdown("---")
-    risk_level = st.radio("ระดับความเสี่ยงที่รับได้ (Risk Profile)", ["ต่ำ (Conservative)", "ปานกลาง (Moderate)", "สูง (Aggressive)"], index=1)
+    risk_level = st.radio("ระดับความเสี่ยงที่รับได้ (Risk Profile)", ["ต่ำ (เน้นปันผลและปลอดภัย)", "ปานกลาง (สมดุล)", "สูง (เน้นเติบโต)"], index=1)
     
-    # Define Allocations based on Risk (Thai Stocks Only)
     if "ต่ำ" in risk_level:
-        # Conservative: Large Cap 60%, REITs 40%
-        allocation = {
-            "หุ้นไทยขนาดใหญ่ (SET50)": 0.60,
-            "กองทุนอสังหาฯ (REITs)": 0.40,
-            "หุ้นเล็ก / หุ้นเติบโต (Growth)": 0.00
-        }
-        alloc_rules = {
-            "Thai Large Cap": 0.60,
-            "REITs": 0.40,
-            "Growth Stocks": 0.00
-        }
+        alloc_rules = {"หุ้นปันผลสูง (Dividend)": 0.50, "หุ้นบลูชิพมั่นคง (Blue Chip)": 0.40, "หุ้นเติบโต (Growth)": 0.10}
     elif "สูง" in risk_level:
-        # Aggressive: Thai Large 40%, Growth 50%, REITs 10%
-        allocation = {
-            "หุ้นไทยขนาดใหญ่ (SET50)": 0.40,
-            "หุ้นเล็ก / หุ้นเติบโต (Growth)": 0.50,
-            "กองทุนอสังหาฯ (REITs)": 0.10
-        }
-        alloc_rules = {
-            "Thai Large Cap": 0.40,
-            "Growth Stocks": 0.50,
-            "REITs": 0.10
-        }
+        alloc_rules = {"หุ้นปันผลสูง (Dividend)": 0.10, "หุ้นบลูชิพมั่นคง (Blue Chip)": 0.30, "หุ้นเติบโต (Growth)": 0.60}
     else:
-        # Moderate: Thai Large 50%, Growth 20%, REITs 30%
-        allocation = {
-            "หุ้นไทยขนาดใหญ่ (SET50)": 0.50,
-            "กองทุนอสังหาฯ (REITs)": 0.30,
-            "หุ้นเล็ก / หุ้นเติบโต (Growth)": 0.20
-        }
-        alloc_rules = {
-            "Thai Large Cap": 0.50,
-            "REITs": 0.30,
-            "Growth Stocks": 0.20
-        }
+        alloc_rules = {"หุ้นปันผลสูง (Dividend)": 0.30, "หุ้นบลูชิพมั่นคง (Blue Chip)": 0.40, "หุ้นเติบโต (Growth)": 0.30}
+        
+    amounts = {k: capital * v for k, v in alloc_rules.items()}
     
-    if st.button("คำนวณสัดส่วนการลงทุน"):
-        amounts = utils.calculate_portfolio(capital, allocation)
+    col1, col2 = st.columns([1, 1])
+    with col1:
+        st.subheader("🎯 สัดส่วนพอร์ตเป้าหมาย")
+        df_port = pd.DataFrame(list(amounts.items()), columns=['ประเภทหุ้น', 'งบลงทุน (บาท)'])
+        df_port['สัดส่วน (%)'] = df_port['ประเภทหุ้น'].map(alloc_rules) * 100
+        st.dataframe(df_port.style.format({'งบลงทุน (บาท)': '{:,.2f}', 'สัดส่วน (%)': '{:.0f}%'}), use_container_width=True, hide_index=True)
         
-        col1, col2 = st.columns([1, 1])
+    with col2:
+        fig = px.pie(values=list(amounts.values()), names=list(amounts.keys()), title="แผนภูมิพอร์ตการลงทุน", hole=0.4)
+        st.plotly_chart(fig)
         
-        with col1:
-            st.subheader("สัดส่วนที่แนะนำ (Target Allocation)")
-            # Create DataFrame with Thai columns
-            df_port = pd.DataFrame(list(amounts.items()), columns=['ประเภทสินทรัพย์', 'มูลค่า (บาท)'])
-            df_port['สัดส่วน (%)'] = df_port['ประเภทสินทรัพย์'].map(allocation) * 100
+    st.markdown("---")
+    st.subheader("🤖 AI คัดเลือกหุ้นเข้าพอร์ต (Top Picks by Category)")
+    st.caption("คัดเลือกอัตโนมัติจากข้อมูลพื้นฐาน (VI Score, Dividend Yield, Growth) ใน SET100")
+    
+    selected_port = []
+    
+    if not df.empty:
+        # Calculate real yield for filtering if needed
+        if 'dividendYield_calc' not in df.columns:
+            df['dividendYield_calc'] = df['dividendRate'] / df['price']
             
-            # Format numbers with commas
-            st.dataframe(
-                df_port.style.format({
-                    'มูลค่า (บาท)': '{:,.2f}', 
-                    'สัดส่วน (%)': '{:.1f}%'
-                }),
-                use_container_width=True
-            )
+        # 1. Dividend Stocks: High Yield, MOS > 0
+        div_df = df[(df['dividendYield_calc'] > 0.04) & (df['margin_of_safety'] > 0)].sort_values('dividendYield_calc', ascending=False).head(5)
+        if div_df.empty: div_df = df.sort_values('dividendYield_calc', ascending=False).head(5) # fallback
+        
+        # 2. Blue Chip: Large Cap > 100B, High VI Score
+        blue_df = df[df['marketCap'] > 100e9].sort_values('VI Score', ascending=False).head(5)
+        if blue_df.empty: blue_df = df.sort_values('marketCap', ascending=False).head(5) # fallback
+        
+        # 3. Growth: Revenue Growth > 5%, ROE > 10%
+        growth_df = df[(df['revenueGrowth'] > 0.05) & (df['returnOnEquity'] > 0.10)].sort_values('revenueGrowth', ascending=False).head(5)
+        if growth_df.empty: growth_df = df.sort_values('revenueGrowth', ascending=False).head(5) # fallback
+        
+        # Show tables in tabs
+        t1, t2, t3 = st.tabs(["💰 หุ้นปันผลสูง (Dividend)", "🏢 หุ้นบลูชิพ (Blue Chip)", "🌱 หุ้นเติบโต (Growth)"])
+        
+        def format_df(d):
+            disp = d[['symbol', 'price', 'dividendYield_calc', 'VI Score', 'revenueGrowth', 'marketCap']].copy()
+            disp['dividendYield_calc'] = disp['dividendYield_calc'] * 100
+            disp['revenueGrowth'] = disp['revenueGrowth'] * 100
+            disp['marketCap'] = disp['marketCap'] / 1e9
+            disp = disp.rename(columns={'symbol': 'หุ้น', 'price': 'ราคา', 'dividendYield_calc': 'ปันผล (%)', 'revenueGrowth': 'เติบโต (%)', 'marketCap': 'มูลค่า (พันล้าน)'})
+            return disp
             
-        with col2:
-            fig = px.pie(
-                values=list(amounts.values()), 
-                names=list(amounts.keys()), 
-                title="แผนภูมิพอร์ตการลงทุน",
-                hole=0.4
-            )
-            st.plotly_chart(fig)
+        with t1:
+            st.dataframe(format_df(div_df).style.format({'ราคา': '{:.2f}', 'ปันผล (%)': '{:.2f}%', 'เติบโต (%)': '{:.2f}%', 'มูลค่า (พันล้าน)': '{:.2f}'}), hide_index=True)
+        with t2:
+            st.dataframe(format_df(blue_df).style.format({'ราคา': '{:.2f}', 'ปันผล (%)': '{:.2f}%', 'เติบโต (%)': '{:.2f}%', 'มูลค่า (พันล้าน)': '{:.2f}'}), hide_index=True)
+        with t3:
+            st.dataframe(format_df(growth_df).style.format({'ราคา': '{:.2f}', 'ปันผล (%)': '{:.2f}%', 'เติบโต (%)': '{:.2f}%', 'มูลค่า (พันล้าน)': '{:.2f}'}), hide_index=True)
             
-        # --- ASSET RECOMMENDATION EXPANDER ---
+        # Build Portfolio Simulation (Top 2 from each)
+        if not div_df.empty: selected_port.extend(div_df['symbol'].head(2).tolist())
+        if not blue_df.empty: selected_port.extend(blue_df['symbol'].head(2).tolist())
+        if not growth_df.empty: selected_port.extend(growth_df['symbol'].head(2).tolist())
+        
+        selected_port = list(set(selected_port)) # Unique
+        
         st.markdown("---")
-        st.subheader("💡 แนะนำสินทรัพย์น่าลงทุน (Asset Recommendations)")
-        st.info("รายชื่อสินทรัพย์ยอดนิยมสำหรับคนไทย (คำเตือน: ไม่ใช่คำแนะนำการลงทุน เป็นเพียงตัวอย่างศึกษา)")
+        st.subheader("📈 ทดสอบประสิทธิภาพพอร์ตจำลอง (Ultimate Backtesting & Fundamentals)")
+        st.info(f"✨ **หุ้นในพอร์ตจำลอง (ตัวแทนจากแต่ละกลุ่ม):** {', '.join(selected_port)}")
         
-        with st.expander("🛡️ ตราสารหนี้ & พันธบัตร (40%)", expanded=True):
-             st.markdown("""
-             **แนวคิด:** รักษาเงินต้น ความเสี่ยงต่ำ
-             *   **พันธบัตรไทย:** `LB296A`, `LB31DA` (ซื้อผ่านแอปเป๋าตัง/ธนาคาร)
-             *   **กองทุนตราสารหนี้:** `K-FIXED`, `SCBFIXED`, `TMBABF`
-             *   **เงินฝาก:** บัญชีออมทรัพย์ดอกเบี้ยสูง (Kept, Dime, etc.)
-             """)
-             
-        with st.expander("🏢 หุ้นไทยขนาดใหญ่ (15%)", expanded=True):
-            st.markdown("""
-            **แนวคิด:** เติบโตมั่นคง + ปันผลสม่ำเสมอ
-            *   **หุ้นเด่น SET100:** `ADVANC`, `PTT`, `AOT`, `KBANK`, `CPALL`
-            *   **กองทุนดัชนี (ETF):** `TDEX` (อ้างอิงดัชนี SET50)
-            """)
-            
-        with st.expander("🏬 กองทุนอสังหาฯ (REITs)", expanded=True):
-            st.markdown("""
-            **แนวคิด:** รับค่าเช่า (Passive Income)
-            *   **ห้าง/ออฟฟิศ:** `CPNREIT`, `ALLY`
-            *   **คลังสินค้า/นิคม:** `WHAIR`, `FTREIT`
-            *   **โครงสร้างพื้นฐาน:** `DIF` (เสาสัญญาณ), `TFFIF` (ทางด่วน)
-            """)
-            
-        with st.expander("🌱 หุ้นเติบโต / หุ้นเล็ก (Growth Stocks)", expanded=True):
-            st.markdown("""
-            **แนวคิด:** เน้นกำไรเติบโตสูง (High Risk High Return)
-            *   **รายตัว:** `JMT`, `FORTH`, `XO`, `SIS`, `COM7`
-            *   **กองทุน:** `K-STAR`, `SCBSE`
-            """)
+        if st.button("🚀 วิเคราะห์ผลตอบแทนย้อนหลัง 5 ปี (yfinance) + ความแกร่ง 10 ปี (thaifin)", type="primary"):
+            with st.spinner("กำลังประมวลผลข้อมูลระดับ Ultimate..."):
+                import yfinance as yf
+                
+                c_backtest, c_fund = st.columns([1.5, 1])
+                
+                with c_backtest:
+                    st.markdown("#### 📊 ผลตอบแทนย้อนหลัง 5 ปี (yfinance)")
+                    yf_tickers = [t + ".BK" if not t.endswith(".BK") else t for t in selected_port]
+                    try:
+                        hist_data = yf.download(yf_tickers, period="5y", progress=False)
+                        if not hist_data.empty:
+                            if 'Close' in hist_data.columns:
+                                close_data = hist_data['Close']
+                            else:
+                                close_data = hist_data # For single ticker or different struct
+                                
+                            if isinstance(close_data, pd.Series):
+                                close_data = close_data.to_frame(name=selected_port[0])
+                            
+                            # Clean column names
+                            close_data.columns = [str(c).replace('.BK', '') for c in close_data.columns]
+                                
+                            # Drop NA rows
+                            close_data = close_data.dropna()
+                            
+                            if not close_data.empty:
+                                # Normalize to Base 100
+                                norm_data = (close_data / close_data.iloc[0]) * 100
+                                # Calculate Equal Weight Portfolio
+                                norm_data['🌟 My AI Portfolio'] = norm_data.mean(axis=1)
+                                
+                                fig_bt = px.line(norm_data, title="การเติบโตของพอร์ตจำลอง (เริ่มต้น 100 บาท)")
+                                fig_bt.update_layout(yaxis_title="มูลค่า (บาท)", hovermode="x unified")
+                                st.plotly_chart(fig_bt, use_container_width=True)
+                                
+                                # 5Y Return
+                                total_return = (norm_data['🌟 My AI Portfolio'].iloc[-1] - 100)
+                                cagr_5y = ((norm_data['🌟 My AI Portfolio'].iloc[-1] / 100) ** (1/5) - 1) * 100
+                                st.success(f"💰 **ผลตอบแทนพอร์ต 5 ปี:** {total_return:+.2f}% | **CAGR:** {cagr_5y:+.2f}% ต่อปี")
+                            else:
+                                st.warning("ข้อมูลราคาย้อนหลังไม่สมบูรณ์")
+                    except Exception as e:
+                        st.error(f"ไม่สามารถดึงข้อมูลราคาย้อนหลังได้: {e}")
+                    
+                with c_fund:
+                    # 2. thaifin 10Y Fundamental Check
+                    st.markdown("#### 🛡️ ความแข็งแกร่ง 10 ปี (thaifin)")
+                    th_hist = utils.get_thaifin_10y_history(selected_port, years=10)
+                    if th_hist:
+                        rows = []
+                        for sym in selected_port:
+                            info = th_hist.get(sym, {})
+                            if info:
+                                # Safe mean calc
+                                roe_t = [x for x in info.get('roe_trend', []) if x > 0]
+                                avg_roe = sum(roe_t)/len(roe_t) if roe_t else 0.0
+                                
+                                div_t = [x for x in info.get('div_trend', []) if x > 0]
+                                avg_div = sum(div_t)/len(div_t) if div_t else 0.0
+                                
+                                rows.append({
+                                    'หุ้น': sym,
+                                    'EPS โตเฉลี่ย 10Y': info.get('eps_cagr_10y', None),
+                                    'ROE เฉลี่ย 10Y': avg_roe,
+                                    'ปันผลเฉลี่ย 10Y': avg_div
+                                })
+                        if rows:
+                            df_fund = pd.DataFrame(rows)
+                            st.dataframe(df_fund.style.format({
+                                'EPS โตเฉลี่ย 10Y': lambda x: f"{x:+.2f}%" if pd.notna(x) else "N/A",
+                                'ROE เฉลี่ย 10Y': '{:.2f}%',
+                                'ปันผลเฉลี่ย 10Y': '{:.2f} ฿'
+                            }).background_gradient(cmap='Greens', subset=['ROE เฉลี่ย 10Y']), hide_index=True, use_container_width=True)
+                        else:
+                            st.warning("ไม่พบข้อมูลพื้นฐานย้อนหลัง 10 ปี")
 
-    # --- PORTFOLIO SIMULATOR ---
+    # --- END PORTFOLIO ---
     st.markdown("---")
     st.subheader("🛠️ จำลองพอร์ตหุ้น (Portfolio Simulator)")
     
@@ -2558,25 +2869,47 @@ elif page == "💰 พอร์ตปันผล Value Growth":
         - สุทธิ: {monthly_target:,.0f} บาท/เดือน
         """)
 
-    st.title("💰 สร้างพอร์ตปันผล Value Growth")
+    st.title("💰 สร้างพอร์ตปันผล Value Growth (Ultimate Dividend Portfolio)")
     st.markdown("---")
 
     st.markdown(f"""
     ### 🎯 เป้าหมาย: สร้าง Cash Flow เดือนละ {monthly_target:,.0f} บาท
-    จากเงินลงทุน **{capital:,.0f} บาท** ด้วยหุ้นปันผลคุณภาพสูง (High Quality Dividend Growth)
+    จากเงินลงทุน **{capital:,.0f} บาท** ด้วยหุ้นปันผลคุณภาพสูง (High Quality Dividend Growth) 
+    *ผสานพลังวิเคราะห์ข้อมูลเชิงลึก 10 ปี จาก thaifin + yfinance*
     """)
 
     # Initialize session state for portfolio if not exists
     if 'portfolio_data' not in st.session_state:
         st.session_state.portfolio_data = None
 
-    if st.button("🚀 สร้างพอร์ตปันผลยั่งยืนให้ผม (Create Portfolio)", type="primary", use_container_width=True):
-        with st.spinner("กำลังสแกนหาหุ้นปันผลที่ดีที่สุดจากตลาด (SET)... อาจใช้เวลา 1-2 นาที"):
+    if st.button("🚀 สร้างพอร์ตปันผลยั่งยืนระดับ Ultimate (Create Portfolio)", type="primary", use_container_width=True):
+        with st.spinner("กำลังสแกนหาหุ้นปันผลที่ดีที่สุดจากตลาด (SET) พร้อมเช็คประวัติ 10 ปี... อาจใช้เวลา 1-2 นาที"):
             # Use SET100 + High Priority
             universe = SET100_TICKERS
-            # Pass version=5 to force cache invalidation and use new logic
-            portfolio, projection, avg_yield, warnings = portfolio_builder.build_dividend_portfolio(universe, capital, monthly_target, risk_level, max_stocks=num_stocks, version=5, monthly_injection=monthly_injection, reinvest_dividends=reinvest_dividends)
+            # Pass version=6 to force cache invalidation and use new logic (capped at 100)
+            portfolio, projection, avg_yield, warnings = portfolio_builder.build_dividend_portfolio(universe, capital, monthly_target, risk_level, max_stocks=num_stocks, version=6, monthly_injection=monthly_injection, reinvest_dividends=reinvest_dividends)
             
+            # Fetch 10-year dividend history from thaifin for consistency check
+            if not portfolio.empty:
+                port_tickers = portfolio['Ticker'].tolist()
+                th_hist = utils.get_thaifin_10y_history(port_tickers, years=10)
+                
+                consistency_scores = []
+                div_trends = []
+                for t in portfolio['Ticker']:
+                    info = th_hist.get(t, {})
+                    div_t = info.get('div_trend', [0]*10)
+                    
+                    # Calculate consistency: count years with dividend > 0
+                    years_paid = sum(1 for d in div_t if d > 0)
+                    consistency = (years_paid / 10.0) * 100
+                    
+                    consistency_scores.append(consistency)
+                    div_trends.append(div_t)
+                    
+                portfolio['Div_Consistency_10Y'] = consistency_scores
+                portfolio['Div_Trend_10Y'] = div_trends
+
             # Save to session state
             st.session_state.portfolio_data = {
                 'portfolio': portfolio,
@@ -2645,7 +2978,8 @@ elif page == "💰 พอร์ตปันผล Value Growth":
                 st.plotly_chart(fig_pie, use_container_width=True)
             
             # 3. Table
-            st.subheader("📋 รายชื่อหุ้นแนะนำ (Recommended Stocks)")
+            st.subheader("📋 รายชื่อหุ้นปันผลระดับ Ultimate (Ultimate Recommended Stocks)")
+            st.markdown("วิเคราะห์พร้อม **ประวัติการจ่ายปันผลย้อนหลัง 10 ปี** (ความสม่ำเสมอ)")
             
             # Format for display
             # Extract useful metrics for easy understanding
@@ -2658,11 +2992,20 @@ elif page == "💰 พอร์ตปันผล Value Growth":
             total_inv = portfolio['Investment'].sum()
             portfolio['Weight'] = portfolio['Investment'] / total_inv if total_inv > 0 else 0
 
-            display_df = portfolio[['Ticker', 'Price', 'Score', 'Weight', 'Yield', 'DPS_Growth', 'Payout', 'ROE', 'D/E', 'Shares', 'Investment', 'Monthly_Income_Net', 'Annual_Income_Net']].copy()
+            # Include new columns if available
+            cols_to_show = ['Ticker', 'Price', 'Score', 'Weight', 'Yield', 'DPS_Growth']
+            if 'Div_Consistency_10Y' in portfolio.columns:
+                cols_to_show.extend(['Div_Consistency_10Y', 'Div_Trend_10Y'])
+            cols_to_show.extend(['Payout', 'ROE', 'D/E', 'Shares', 'Investment', 'Monthly_Income_Net', 'Annual_Income_Net'])
+
+            display_df = portfolio[cols_to_show].copy()
             
             # Format Percentage
             for col in ['Yield', 'DPS_Growth', 'Payout', 'ROE', 'Weight']:
                 display_df[col] = display_df[col].map(lambda x: f"{x:.2%}" if pd.notnull(x) else "-")
+                
+            if 'Div_Consistency_10Y' in display_df.columns:
+                display_df['Div_Consistency_10Y'] = display_df['Div_Consistency_10Y'].map(lambda x: f"{x:.0f}%")
             
             # Format Numbers
             display_df['Price'] = display_df['Price'].map('{:,.2f}'.format)
@@ -2673,13 +3016,15 @@ elif page == "💰 พอร์ตปันผล Value Growth":
             display_df['Annual_Income_Net'] = display_df['Annual_Income_Net'].map('{:,.0f}'.format)
             
             # Rename columns to Thai
-            display_df = display_df.rename(columns={
+            rename_dict = {
                 'Ticker': 'ชื่อหุ้น',
                 'Price': 'ราคา',
                 'Score': 'คะแนน',
                 'Weight': 'สัดส่วน (%)',
                 'Yield': 'ปันผล (%)',
                 'DPS_Growth': 'Growth (%)',
+                'Div_Consistency_10Y': 'ความสม่ำเสมอ (10 ปี)',
+                'Div_Trend_10Y': 'ประวัติปันผล (10Y)',
                 'Payout': 'Payout',
                 'ROE': 'ROE',
                 'D/E': 'D/E',
@@ -2687,9 +3032,15 @@ elif page == "💰 พอร์ตปันผล Value Growth":
                 'Investment': 'เงินลงทุน (บาท)',
                 'Monthly_Income_Net': 'ปันผลสุทธิ/เดือน',
                 'Annual_Income_Net': 'ปันผลสุทธิ/ปี'
-            })
+            }
+            display_df = display_df.rename(columns=rename_dict)
             
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
+            # Column Config for Bar Chart
+            cfg = {}
+            if 'ประวัติปันผล (10Y)' in display_df.columns:
+                cfg['ประวัติปันผล (10Y)'] = st.column_config.BarChartColumn("ประวัติปันผล (10Y)", width="medium")
+            
+            st.dataframe(display_df, use_container_width=True, hide_index=True, column_config=cfg)
             
             # Details Expander
             with st.expander("ดูรายละเอียดคะแนน (Scoring Details)"):
