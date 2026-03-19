@@ -2874,9 +2874,20 @@ elif page == "💰 พอร์ตปันผล Value Growth":
 
     st.markdown(f"""
     ### 🎯 เป้าหมาย: สร้าง Cash Flow เดือนละ {monthly_target:,.0f} บาท
-    จากเงินลงทุน **{capital:,.0f} บาท** ด้วยหุ้นปันผลคุณภาพสูง (High Quality Dividend Growth) 
+    ด้วยหุ้นปันผลคุณภาพสูง (High Quality Dividend Growth) 
     *ผสานพลังวิเคราะห์ข้อมูลเชิงลึก 10 ปี จาก thaifin + yfinance*
     """)
+
+    # --- GOAL-BASED CALCULATOR ---
+    with st.expander("🪄 AI คำนวณเงินต้นให้ (Goal-Based Planning)", expanded=False):
+        st.info("ระบบจะใช้ค่าเฉลี่ย Yield ของตลาดหุ้นไทยที่ปลอดภัย (ประมาณ 5-6%) เพื่อคำนวณเงินต้นที่คุณควรมี")
+        if st.button("คำนวณเงินต้นที่ต้องใช้เพื่อเป้าหมายนี้"):
+            # Assume safe yield 5.5%
+            target_annual_income = monthly_target * 12
+            required_capital = target_annual_income / 0.055
+            st.success(f"เพื่อสร้าง Cash Flow เดือนละ **{monthly_target:,.0f} บาท** (ปีละ {target_annual_income:,.0f} บาท)")
+            st.markdown(f"คุณควรมีเงินลงทุนตั้งต้นประมาณ: **{required_capital:,.0f} บาท** *(ที่ Yield 5.5%)*")
+            st.caption("💡 แนะนำ: นำตัวเลขนี้ไปกรอกในช่อง 'เงินลงทุนเริ่มต้น' ด้านซ้ายมือเพื่อความสมจริง")
 
     # Initialize session state for portfolio if not exists
     if 'portfolio_data' not in st.session_state:
@@ -2886,8 +2897,8 @@ elif page == "💰 พอร์ตปันผล Value Growth":
         with st.spinner("กำลังสแกนหาหุ้นปันผลที่ดีที่สุดจากตลาด (SET) พร้อมเช็คประวัติ 10 ปี... อาจใช้เวลา 1-2 นาที"):
             # Use SET100 + High Priority
             universe = SET100_TICKERS
-            # Pass version=6 to force cache invalidation and use new logic (capped at 100)
-            portfolio, projection, avg_yield, warnings = portfolio_builder.build_dividend_portfolio(universe, capital, monthly_target, risk_level, max_stocks=num_stocks, version=6, monthly_injection=monthly_injection, reinvest_dividends=reinvest_dividends)
+            # Pass version=7 to force cache invalidation and use new logic (FCF & F-Score included)
+            portfolio, projection, avg_yield, warnings = portfolio_builder.build_dividend_portfolio(universe, capital, monthly_target, risk_level, max_stocks=num_stocks, version=7, monthly_injection=monthly_injection, reinvest_dividends=reinvest_dividends)
             
             # Fetch 10-year dividend history from thaifin for consistency check
             if not portfolio.empty:
@@ -2979,13 +2990,15 @@ elif page == "💰 พอร์ตปันผล Value Growth":
             
             # 3. Table
             st.subheader("📋 รายชื่อหุ้นปันผลระดับ Ultimate (Ultimate Recommended Stocks)")
-            st.markdown("วิเคราะห์พร้อม **ประวัติการจ่ายปันผลย้อนหลัง 10 ปี** (ความสม่ำเสมอ)")
+            st.markdown("วิเคราะห์พร้อม **ประวัติการจ่ายปันผลย้อนหลัง 10 ปี** และ **ความแกร่งกระแสเงินสด (FCF)**")
             
             # Format for display
             # Extract useful metrics for easy understanding
             portfolio['Payout'] = portfolio['Details'].apply(lambda x: x.get('Payout_Ratio', 0))
             portfolio['ROE'] = portfolio['Details'].apply(lambda x: x.get('ROE', 0))
             portfolio['D/E'] = portfolio['Details'].apply(lambda x: x.get('DE_Ratio', 0))
+            portfolio['FCF_Yield'] = portfolio['Details'].apply(lambda x: x.get('FCF_Yield', 0))
+            portfolio['F_Score'] = portfolio['Details'].apply(lambda x: x.get('Score_F_Score', 0))
             portfolio['Annual_Income_Net'] = portfolio['Monthly_Income_Net'] * 12
             
             # Calculate Investment Weight
@@ -2996,12 +3009,12 @@ elif page == "💰 พอร์ตปันผล Value Growth":
             cols_to_show = ['Ticker', 'Price', 'Score', 'Weight', 'Yield', 'DPS_Growth']
             if 'Div_Consistency_10Y' in portfolio.columns:
                 cols_to_show.extend(['Div_Consistency_10Y', 'Div_Trend_10Y'])
-            cols_to_show.extend(['Payout', 'ROE', 'D/E', 'Shares', 'Investment', 'Monthly_Income_Net', 'Annual_Income_Net'])
+            cols_to_show.extend(['FCF_Yield', 'F_Score', 'Payout', 'ROE', 'D/E', 'Shares', 'Investment', 'Monthly_Income_Net', 'Annual_Income_Net'])
 
             display_df = portfolio[cols_to_show].copy()
             
             # Format Percentage
-            for col in ['Yield', 'DPS_Growth', 'Payout', 'ROE', 'Weight']:
+            for col in ['Yield', 'DPS_Growth', 'Payout', 'ROE', 'Weight', 'FCF_Yield']:
                 display_df[col] = display_df[col].map(lambda x: f"{x:.2%}" if pd.notnull(x) else "-")
                 
             if 'Div_Consistency_10Y' in display_df.columns:
@@ -3025,6 +3038,8 @@ elif page == "💰 พอร์ตปันผล Value Growth":
                 'DPS_Growth': 'Growth (%)',
                 'Div_Consistency_10Y': 'ความสม่ำเสมอ (10 ปี)',
                 'Div_Trend_10Y': 'ประวัติปันผล (10Y)',
+                'FCF_Yield': 'FCF Yield',
+                'F_Score': 'คะแนน F-Score',
                 'Payout': 'Payout',
                 'ROE': 'ROE',
                 'D/E': 'D/E',

@@ -191,36 +191,72 @@ def calculate_score(data):
     details['ROE'] = roe
     details['DE_Ratio'] = de_ratio
 
-    # --- 6. Cash Flow Coverage (10 pts) ---
-    # Criterion: Cash Payout <= 60%
+    # --- 6. Cash Flow Coverage & FCF Yield (15 pts) ---
+    # Criterion: Cash Payout <= 60% OR FCF Yield > 5%
     cf_score = 0
     cash_payout = 0
+    fcf_yield = 0
     try:
         if not cashflow.empty:
-            # Locate items
-            # Note: yfinance format varies. Usually 'Operating Cash Flow', 'Cash Dividends Paid'
             ocf = None
             div_paid = None
+            capex = None
             
-            # Search loosely
             for idx in cashflow.index:
                 if 'Operating' in idx and 'Cash' in idx:
                     ocf = cashflow.loc[idx].iloc[0]
                 if 'Dividend' in idx and 'Paid' in idx:
                     div_paid = cashflow.loc[idx].iloc[0]
+                if 'Capital Expenditure' in idx or 'CapEx' in idx:
+                    capex = cashflow.loc[idx].iloc[0]
             
+            # Cash Payout Score (up to 10 pts)
             if ocf and div_paid and ocf > 0:
                 cash_payout = abs(div_paid) / ocf
                 if cash_payout <= 0.6:
-                    cf_score = 10
+                    cf_score += 10
                 elif cash_payout <= 0.8:
-                    cf_score = 5
+                    cf_score += 5
+                    
+            # FCF Yield Score (up to 5 pts)
+            mcap = info.get('marketCap', 0)
+            if ocf and capex and mcap and mcap > 0:
+                fcf = ocf - abs(capex) # capex is usually negative in yfinance
+                fcf_yield = fcf / mcap
+                if fcf_yield >= 0.05:
+                    cf_score += 5
+                elif fcf_yield >= 0.03:
+                    cf_score += 2
+                    
     except:
         pass
+        
+    # Cap cf_score at 15
+    if cf_score > 15: cf_score = 15
         
     score += cf_score
     details['Score_CF'] = cf_score
     details['Cash_Payout'] = cash_payout
+    details['FCF_Yield'] = fcf_yield
+
+    # --- 7. Piotroski F-Score (10 pts) ---
+    # Fetch REAL F-Score from utils using yfinance financials
+    f_score_val = 0
+    try:
+        import utils
+        adv_res = utils.calculate_magic_formula_and_f_score(symbol)
+        if adv_res and adv_res.get('f_score') is not None:
+            f_score_val = adv_res['f_score']
+            
+            # Convert 0-9 scale to 0-10 points
+            if f_score_val >= 7:
+                score += 10
+            elif f_score_val >= 5:
+                score += 5
+    except Exception as e:
+        pass
+        
+    details['Score_F_Score'] = f_score_val # Hold real F-Score
 
     # --- Bonus: High Priority Universe (+10 pts) ---
     bonus = 0
