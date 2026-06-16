@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+*.swp
+.DS_Store
+yf_cache/
+temp_home/
+output.log
+portfolio.json
+alert_log.json
+set100_meta.json
