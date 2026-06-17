@@ -55,6 +55,29 @@ def translate_sector_name(sector_name):
         return "ไม่ระบุ"
     return SECTOR_NAME_TH.get(sector_text, sector_text)
 
+def compute_dividend_yield_pct(row):
+    price = row.get("price", 0)
+    dps = row.get("dividendRate", 0)
+    if pd.notna(price) and price and price > 0 and pd.notna(dps) and dps and dps > 0:
+        y = (dps / price) * 100
+        if 0 <= y <= 40:
+            return float(y)
+
+    yv = row.get("dividendYield", None)
+    if pd.isna(yv) or yv is None:
+        return None
+    try:
+        yv = float(yv)
+    except Exception:
+        return None
+
+    if yv <= 0:
+        return None
+    if yv <= 1:
+        y = yv * 100
+        return float(y) if y <= 40 else None
+    return float(yv) if yv <= 40 else None
+
 SET100_UPDATE_TTL_SECONDS = 86400
 
 @st.cache_data(ttl=SET100_UPDATE_TTL_SECONDS)
@@ -235,6 +258,7 @@ if not df.empty:
     df['debtToEquityRatio'] = df['debtToEquity'] / 100
     df['sector'] = df['sector'].fillna('Unknown')
     df['sector_th'] = df['sector'].apply(translate_sector_name)
+    df['dividend_yield_pct'] = df.apply(compute_dividend_yield_pct, axis=1)
     eps_pos = df['trailingEps'].where(df['trailingEps'] > 0)
     bv_pos = df['bookValue'].where(df['bookValue'] > 0)
     df['pe_ratio'] = df['price'] / eps_pos
@@ -773,11 +797,8 @@ if page == "📊 แดชบอร์ดภาพรวม":
         median_pe = df['P/E_raw'].median()
         
         avg_div = 0
-        if 'dividendYield' in df.columns:
-             # some might be NaN
-             avg_div = df['dividendYield'].dropna().mean()
-             if avg_div < 1: # if it's decimal
-                 avg_div = avg_div * 100
+        if 'dividend_yield_pct' in df.columns:
+            avg_div = df['dividend_yield_pct'].dropna().mean()
                  
         avg_mos_all = df['margin_of_safety'].dropna().mean()
         
@@ -1367,14 +1388,11 @@ if page == "📊 แดชบอร์ดภาพรวม":
         c_div1, c_div2 = st.columns(2)
         with c_div1:
             st.markdown("**Top 5 หุ้นปันผลสูง (Yield > 4%)**")
-            if 'dividendYield' in df.columns:
-                df['div_yield_pct'] = df.apply(
-                    lambda row: row['dividendYield'] if (pd.notna(row['dividendYield']) and row['dividendYield'] > 1) else (row['dividendYield'] * 100 if pd.notna(row['dividendYield']) else 0), axis=1
-                )
-                top_div = df[df['div_yield_pct'] > 4].sort_values(by='div_yield_pct', ascending=False).head(5)
+            if 'dividend_yield_pct' in df.columns:
+                top_div = df[df['dividend_yield_pct'] > 4].sort_values(by='dividend_yield_pct', ascending=False).head(5)
                 if not top_div.empty:
                     st.dataframe(
-                        top_div[['symbol', 'price', 'div_yield_pct', 'VI Score', 'margin_of_safety']].rename(columns={'symbol': 'หุ้น', 'price': 'ราคา', 'div_yield_pct': 'ปันผล (%)', 'VI Score': 'คะแนน VI', 'margin_of_safety': 'MOS (%)'}).style.format({
+                        top_div[['symbol', 'price', 'dividend_yield_pct', 'VI Score', 'margin_of_safety']].rename(columns={'symbol': 'หุ้น', 'price': 'ราคา', 'dividend_yield_pct': 'ปันผล (%)', 'VI Score': 'คะแนน VI', 'margin_of_safety': 'MOS (%)'}).style.format({
                             'ราคา': '{:.2f}', 'ปันผล (%)': '{:.2f}%', 'MOS (%)': '{:.2f}%'
                         }),
                         hide_index=True,
