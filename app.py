@@ -30,6 +30,31 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+SECTOR_NAME_TH = {
+    "Industrials": "อุตสาหกรรม",
+    "Technology": "เทคโนโลยี",
+    "Consumer Cyclical": "สินค้าอุปโภคบริโภคตามวัฏจักร",
+    "Consumer Defensive": "สินค้าอุปโภคบริโภคจำเป็น",
+    "Utilities": "สาธารณูปโภค",
+    "Basic Materials": "วัสดุพื้นฐาน",
+    "Communication Services": "บริการสื่อสาร",
+    "Healthcare": "การแพทย์",
+    "Energy": "พลังงาน",
+    "Financial Services": "การเงิน",
+    "Real Estate": "อสังหาริมทรัพย์",
+    "Consumer Staples": "สินค้าอุปโภคบริโภคจำเป็น",
+    "Financial": "การเงิน",
+    "Unknown": "ไม่ระบุ",
+}
+
+def translate_sector_name(sector_name):
+    if sector_name is None:
+        return "ไม่ระบุ"
+    sector_text = str(sector_name).strip()
+    if not sector_text:
+        return "ไม่ระบุ"
+    return SECTOR_NAME_TH.get(sector_text, sector_text)
+
 SET100_UPDATE_TTL_SECONDS = 86400
 
 @st.cache_data(ttl=SET100_UPDATE_TTL_SECONDS)
@@ -208,6 +233,8 @@ if not df.empty:
     # We need to divide by 100 for display if we want 'x', but for scoring logic check raw value.
     # Let's fix the dataframe column for display purposes to be 'x' (ratio).
     df['debtToEquityRatio'] = df['debtToEquity'] / 100
+    df['sector'] = df['sector'].fillna('Unknown')
+    df['sector_th'] = df['sector'].apply(translate_sector_name)
     eps_pos = df['trailingEps'].where(df['trailingEps'] > 0)
     bv_pos = df['bookValue'].where(df['bookValue'] > 0)
     df['pe_ratio'] = df['price'] / eps_pos
@@ -769,13 +796,12 @@ if page == "📊 แดชบอร์ดภาพรวม":
             st.markdown("**🗺️ แผนที่ความถูกแพง (Treemap)**")
             # Create Treemap
             df_tree = df[df['marketCap'] > 0].copy()
-            df_tree['sector'] = df_tree['sector'].fillna('Unknown')
             # Clip MOS for better color scaling (-50 to +50)
             df_tree['mos_clipped'] = df_tree['margin_of_safety'].clip(lower=-50, upper=50)
             
             fig_tree = px.treemap(
                 df_tree,
-                path=[px.Constant("SET100"), 'sector', 'symbol'],
+                path=[px.Constant("SET100"), 'sector_th', 'symbol'],
                 values='marketCap',
                 color='mos_clipped',
                 color_continuous_scale='RdYlGn',
@@ -790,16 +816,15 @@ if page == "📊 แดชบอร์ดภาพรวม":
             st.markdown("**🎯 กราฟค้นหาหุ้นเทพ (Quality vs Value)**")
             # Scatter Plot: X = MOS, Y = VI Score
             df_scatter = df.copy()
-            df_scatter['sector'] = df_scatter['sector'].fillna('Unknown')
             
             fig_scatter = px.scatter(
                 df_scatter,
                 x='margin_of_safety',
                 y='VI Score',
                 size='marketCap',
-                color='sector',
+                color='sector_th',
                 hover_name='symbol',
-                hover_data={'margin_of_safety': ':.2f', 'VI Score': True, 'price': True, 'marketCap': False, 'sector': False},
+                hover_data={'margin_of_safety': ':.2f', 'VI Score': True, 'price': True, 'marketCap': False, 'sector_th': False},
                 title="แกน X: ความถูกแพง (MOS) | แกน Y: คุณภาพ (VI Score)"
             )
             # Add quadrant lines
@@ -1294,8 +1319,8 @@ if page == "📊 แดชบอร์ดภาพรวม":
         st.markdown("---")
         st.subheader("🏢 วิเคราะห์รายกลุ่มอุตสาหกรรม")
         
-        if 'sector' in df.columns:
-            sector_df = df[df['sector'] != 'Unknown'].groupby('sector').agg(
+        if 'sector_th' in df.columns:
+            sector_df = df[df['sector_th'] != 'ไม่ระบุ'].groupby('sector_th').agg(
                 count=('symbol', 'count'),
                 avg_mos=('margin_of_safety', 'mean'),
                 avg_pe=('P/E_raw', 'median'),
@@ -1310,20 +1335,20 @@ if page == "📊 แดชบอร์ดภาพรวม":
                 fig_sec = px.bar(
                     sector_df,
                     x='avg_mos',
-                    y='sector',
+                    y='sector_th',
                     orientation='h',
                     color='avg_mos',
                     color_continuous_scale='RdYlGn',
                     color_continuous_midpoint=0,
                     title="กลุ่มอุตสาหกรรมที่ราคาถูกที่สุด (MOS เฉลี่ย %)",
-                    labels={'avg_mos': 'MOS เฉลี่ย (%)', 'sector': 'อุตสาหกรรม'}
+                    labels={'avg_mos': 'MOS เฉลี่ย (%)', 'sector_th': 'อุตสาหกรรม'}
                 )
                 fig_sec.update_layout(height=350, margin=dict(l=0, r=0, t=30, b=0))
                 st.plotly_chart(fig_sec, use_container_width=True)
             
             with c_sec2:
                 st.markdown("**ตารางสรุปกลุ่มอุตสาหกรรม**")
-                display_sec = sector_df[['sector', 'count', 'avg_mos', 'avg_pe', 'avg_vi_score']].copy()
+                display_sec = sector_df[['sector_th', 'count', 'avg_mos', 'avg_pe', 'avg_vi_score']].copy()
                 display_sec.columns = ['อุตสาหกรรม', 'จำนวนหุ้น', 'MOS เฉลี่ย(%)', 'P/E เฉลี่ย', 'VI Score เฉลี่ย']
                 st.dataframe(
                     display_sec.style.format({
@@ -2035,7 +2060,7 @@ if page == "📊 แดชบอร์ดภาพรวม":
         
         fig_treemap = px.treemap(
             heat_df, 
-            path=[px.Constant("SET100"), 'sector', 'symbol'], 
+            path=[px.Constant("SET100"), 'sector_th', 'symbol'], 
             values='marketCap',
             color='margin_of_safety',
             color_continuous_scale='RdYlGn',
@@ -2155,7 +2180,7 @@ elif page == "🧭 แผนลงทุนมือใหม่":
             sym = row.get("symbol")
             pick_rows.append({
                 "หุ้น": sym,
-                "กลุ่ม": row.get("sector") or "Unknown",
+                    "กลุ่ม": translate_sector_name(row.get("sector")),
                 "ราคา": row.get("price"),
                 "MOS (%)": row.get("margin_of_safety_raw"),
                 "VI Score": row.get("VI Score"),
@@ -2196,7 +2221,7 @@ elif page == "🔍 วิเคราะห์หุ้นรายตัว":
                 
                 # --- HEADER SECTION ---
                 st.markdown(f"## {valuation['longName']} ({valuation['symbol']})")
-                st.markdown(f"**อุตสาหกรรม:** {valuation.get('sector')} | **ธุรกิจ:** {valuation.get('summary')[:150]}...")
+                st.markdown(f"**อุตสาหกรรม:** {translate_sector_name(valuation.get('sector'))} | **ธุรกิจ:** {valuation.get('summary')[:150]}...")
                 
                 # Gauge / Recommendation
                 rec_val = valuation.get('recommendation', 3.0) # 1=Buy, 5=Sell
